@@ -1,0 +1,957 @@
+/**
+ * BOM Radar Card for Home Assistant
+ * Uses native BOM WMTS tiles from api.bom.gov.au
+ *
+ * Author: Ashton Turner (github.com/AshtonAU)
+ * License: MIT
+ */
+
+const CARD_VERSION = '1.0.0';
+
+console.info(
+  `%c BOM-RADAR-CARD %c v${CARD_VERSION} `,
+  'color: #00BCD4; font-weight: bold; background: #1a1a2e',
+  'color: white; font-weight: bold; background: #16213e',
+);
+
+// BOM WMTS Configuration
+const BOM_WMTS_BASE = 'https://api.bom.gov.au/apikey/v1/mapping/timeseries/wmts';
+
+// Available radar layers
+const BOM_LAYERS = {
+  'rain_rate': {
+    id: 'atm_surf_air_precip_rate_1hr_total_mm_h',
+    name: 'Rain Rate',
+    unit: 'mm/h',
+    tileMatrixSet: 'GoogleMapsCompatible_BoM',
+  },
+  'reflectivity': {
+    id: 'atm_surf_air_precip_reflectivity_dbz',
+    name: 'Reflectivity',
+    unit: 'dBZ',
+    tileMatrixSet: 'GoogleMapsCompatible_BoM',
+  },
+  'accumulation_1hr': {
+    id: 'atm_surf_air_precip_accumulation_1hr_total_mm',
+    name: 'Rain 1hr',
+    unit: 'mm',
+    tileMatrixSet: 'GoogleMapsCompatible_BoM',
+  },
+  'accumulation_24hr': {
+    id: 'atm_surf_air_precip_accumulation_24hr_total_mm',
+    name: 'Rain 24hr',
+    unit: 'mm',
+    tileMatrixSet: 'GoogleMapsCompatible_BoM',
+  },
+};
+
+// TileMatrixSet: GoogleMapsCompatible_BoM
+// TopLeftCorner (EPSG:3857) and matrix dimensions for each zoom level
+const TILE_MATRIX_INFO = [
+  { z: 0, tlx: 11584952, tly: 34168990.685578, w: 1, h: 1 },
+  { z: 1, tlx: 11584952, tly: 14131482.342789, w: 1, h: 1 },
+  { z: 2, tlx: 11584952, tly: 4112728.171395, w: 1, h: 1 },
+  { z: 3, tlx: 11584952, tly: 4112728.171395, w: 2, h: 2 },
+  { z: 4, tlx: 11584952, tly: 1608039.628546, w: 3, h: 3 },
+  { z: 5, tlx: 11584952, tly: 355695.357122, w: 6, h: 5 },
+  { z: 6, tlx: 11584952, tly: -270476.778591, w: 11, h: 9 },
+  { z: 7, tlx: 11584952, tly: -583562.846447, w: 22, h: 17 },
+  { z: 8, tlx: 11584952, tly: -740105.880375, w: 43, h: 33 },
+];
+
+const WORLD_EXTENT = 40075016.68;
+const HALF_EXTENT = 20037508.34;
+
+// 1x1 transparent PNG for out-of-bounds tiles
+const TRANSPARENT_PIXEL = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+
+function getTileOffset(z) {
+  if (z < 0 || z > 8) return null;
+  const info = TILE_MATRIX_INFO[z];
+  const tileSpan = WORLD_EXTENT / Math.pow(2, z);
+  return {
+    xOffset: Math.round((info.tlx + HALF_EXTENT) / tileSpan),
+    yOffset: Math.round((HALF_EXTENT - info.tly) / tileSpan),
+    width: info.w,
+    height: info.h,
+  };
+}
+
+// SVG icons
+const ICON_PLAY = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>';
+const ICON_PAUSE = '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>';
+
+// Leaflet CSS (minimal, inlined for Shadow DOM)
+const LEAFLET_CSS = `
+.leaflet-pane,.leaflet-tile,.leaflet-marker-icon,.leaflet-marker-shadow,.leaflet-tile-container,.leaflet-pane>svg,.leaflet-pane>canvas,.leaflet-zoom-box,.leaflet-image-layer,.leaflet-layer{position:absolute;left:0;top:0}
+.leaflet-container{overflow:hidden;-webkit-tap-highlight-color:transparent;font-family:inherit}
+.leaflet-tile,.leaflet-marker-icon,.leaflet-marker-shadow{-webkit-user-select:none;-moz-user-select:none;user-select:none;-webkit-user-drag:none}
+.leaflet-tile{filter:none;visibility:hidden}
+.leaflet-tile-loaded{visibility:inherit}
+.leaflet-zoom-anim .leaflet-zoom-animated{will-change:transform;-webkit-transition:-webkit-transform .25s cubic-bezier(0,0,.25,1);-moz-transition:-moz-transform .25s cubic-bezier(0,0,.25,1);transition:transform .25s cubic-bezier(0,0,.25,1)}
+.leaflet-zoom-anim .leaflet-tile,.leaflet-pan-anim .leaflet-tile{-webkit-transition:none;-moz-transition:none;transition:none}
+.leaflet-interactive{cursor:pointer}
+.leaflet-grab{cursor:-webkit-grab;cursor:-moz-grab;cursor:grab}
+.leaflet-crosshair,.leaflet-crosshair .leaflet-interactive{cursor:crosshair}
+.leaflet-control-zoom-in,.leaflet-control-zoom-out{font:bold 18px 'Lucida Console',Monaco,monospace;text-indent:1px}
+.leaflet-touch .leaflet-control-zoom-in,.leaflet-touch .leaflet-control-zoom-out{font-size:22px}
+.leaflet-map-pane,.leaflet-tile,.leaflet-marker-icon,.leaflet-marker-shadow,.leaflet-tile-container,.leaflet-pane>svg,.leaflet-pane>canvas,.leaflet-zoom-box,.leaflet-image-layer,.leaflet-layer{position:absolute;left:0;top:0;pointer-events:none}
+.leaflet-tile-pane{pointer-events:auto}
+.leaflet-control{position:relative;z-index:800;pointer-events:visiblePainted;pointer-events:auto}
+.leaflet-top,.leaflet-bottom{position:absolute;z-index:1000;pointer-events:none}
+.leaflet-top{top:0}.leaflet-right{right:0}.leaflet-bottom{bottom:0}.leaflet-left{left:0}
+.leaflet-control{float:left;clear:both}
+.leaflet-right .leaflet-control{float:right}
+.leaflet-top .leaflet-control{margin-top:10px}
+.leaflet-bottom .leaflet-control{margin-bottom:10px}
+.leaflet-left .leaflet-control{margin-left:10px}
+.leaflet-right .leaflet-control{margin-right:10px}
+.leaflet-control-zoom{border:none;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.3)}
+.leaflet-control-zoom a{background-color:rgba(20,20,40,0.85);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);color:rgba(255,255,255,0.7);width:32px;height:32px;line-height:32px;text-align:center;text-decoration:none;display:block;border-bottom:1px solid rgba(255,255,255,0.06);transition:background 0.15s,color 0.15s}
+.leaflet-control-zoom a:hover{background-color:rgba(30,30,60,0.95);color:white}
+.leaflet-control-zoom-in{border-top-left-radius:8px;border-top-right-radius:8px}
+.leaflet-control-zoom-out{border-bottom-left-radius:8px;border-bottom-right-radius:8px;border-bottom:none}
+.leaflet-control-attribution{background:rgba(0,0,0,0.35)!important;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);color:rgba(255,255,255,0.4);font-size:9px;padding:1px 6px;border-radius:6px 0 0 0;line-height:1.4}
+.leaflet-control-attribution a{color:rgba(100,180,255,0.5);text-decoration:none}
+.leaflet-touch .leaflet-control-zoom a{width:36px;height:36px;line-height:36px;font-size:18px}
+`;
+
+const CARD_CSS = `
+:host {
+  display: block;
+}
+ha-card {
+  overflow: hidden;
+  border-radius: var(--ha-card-border-radius, 12px);
+  background: var(--ha-card-background, var(--card-background-color, rgba(26, 26, 46, 0.6)));
+  box-shadow: var(--ha-card-box-shadow, none);
+}
+.card-content {
+  padding: 0;
+  position: relative;
+}
+#map {
+  width: 100%;
+  border-radius: var(--ha-card-border-radius, 12px);
+  z-index: 0;
+  background: #0d1117;
+}
+
+/* Controls bar */
+.controls {
+  position: absolute;
+  bottom: 10px;
+  left: 10px;
+  right: 10px;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: rgba(10, 10, 24, 0.8);
+  backdrop-filter: blur(16px) saturate(1.8);
+  -webkit-backdrop-filter: blur(16px) saturate(1.8);
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+}
+.play-btn {
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.85);
+  cursor: pointer;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  transition: background 0.15s, transform 0.1s;
+  flex-shrink: 0;
+}
+.play-btn svg {
+  width: 16px;
+  height: 16px;
+}
+.play-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+.play-btn:active {
+  transform: scale(0.92);
+}
+
+/* Timeline */
+.timeline {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  height: 28px;
+  padding: 0 2px;
+}
+.frame-dot {
+  flex: 1;
+  height: 3px;
+  border-radius: 1.5px;
+  background: rgba(255, 255, 255, 0.1);
+  cursor: pointer;
+  transition: background 0.2s, height 0.15s, box-shadow 0.2s;
+  position: relative;
+}
+.frame-dot:hover {
+  background: rgba(255, 255, 255, 0.25);
+  height: 5px;
+}
+.frame-dot.active {
+  background: #00BCD4;
+  height: 5px;
+  box-shadow: 0 0 8px rgba(0, 188, 212, 0.5);
+}
+.frame-dot.past {
+  background: rgba(0, 188, 212, 0.25);
+}
+
+/* Time label */
+.time-label {
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 11px;
+  font-weight: 500;
+  min-width: 40px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+  letter-spacing: 0.3px;
+}
+
+/* Layer label */
+.layer-badge {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 1000;
+  padding: 4px 10px;
+  background: rgba(10, 10, 24, 0.7);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  pointer-events: none;
+}
+
+/* Loading state */
+.loading-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1001;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  background: rgba(13, 17, 23, 0.6);
+  pointer-events: none;
+  transition: opacity 0.3s;
+}
+.loading-overlay.hidden {
+  opacity: 0;
+}
+.spinner {
+  width: 24px;
+  height: 24px;
+  border: 2px solid rgba(0, 188, 212, 0.15);
+  border-top-color: #00BCD4;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+.loading-text {
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.5px;
+}
+.error-text {
+  color: rgba(255, 100, 100, 0.7);
+  font-size: 12px;
+}
+
+/* Home marker */
+.marker-dot {
+  position: relative;
+}
+.marker-dot::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 12px;
+  height: 12px;
+  background: #00BCD4;
+  border: 2px solid rgba(255, 255, 255, 0.9);
+  border-radius: 50%;
+  box-shadow: 0 0 10px rgba(0, 188, 212, 0.6), 0 0 20px rgba(0, 188, 212, 0.2);
+}
+.marker-dot::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 24px;
+  height: 24px;
+  background: rgba(0, 188, 212, 0.15);
+  border-radius: 50%;
+  animation: pulse 2s ease-out infinite;
+}
+@keyframes pulse {
+  0% { transform: translate(-50%, -50%) scale(0.8); opacity: 1; }
+  100% { transform: translate(-50%, -50%) scale(2); opacity: 0; }
+}
+`;
+
+function loadLeaflet() {
+  return new Promise((resolve, reject) => {
+    if (window.L) {
+      resolve(window.L);
+      return;
+    }
+    const script = document.createElement('script');
+    script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+    script.onload = () => resolve(window.L);
+    script.onerror = () => reject(new Error('Failed to load Leaflet'));
+    document.head.appendChild(script);
+  });
+}
+
+// Generate radar timestamps locally (avoids CORS issues with BOM's WMTS capabilities endpoint)
+function generateTimestamps(count = 9) {
+  const now = new Date();
+  const minutes = Math.floor(now.getUTCMinutes() / 5) * 5;
+  const latest = new Date(Date.UTC(
+    now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(),
+    now.getUTCHours(), minutes, 0
+  ));
+  // BOM takes ~5 min to process, go back one interval
+  latest.setUTCMinutes(latest.getUTCMinutes() - 5);
+
+  const timestamps = [];
+  for (let i = count - 1; i >= 0; i--) {
+    const t = new Date(latest.getTime() - i * 5 * 60 * 1000);
+    timestamps.push(t.toISOString().replace(/\.\d{3}Z$/, 'Z'));
+  }
+  return timestamps;
+}
+
+function bomTileUrl(layerId, tileMatrixSet, z, col, row, time) {
+  return `${BOM_WMTS_BASE}?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0` +
+    `&LAYER=${layerId}&STYLE=default&FORMAT=image/png` +
+    `&TILEMATRIXSET=${tileMatrixSet}&TILEMATRIX=${z}` +
+    `&TILEROW=${row}&TILECOL=${col}&time=${time}`;
+}
+
+function createBomTileLayer(L, layerId, tileMatrixSet, time) {
+  return L.TileLayer.extend({
+    getTileUrl: function(coords) {
+      const z = coords.z;
+      const offset = getTileOffset(z);
+      if (!offset) return '';
+      const col = coords.x - offset.xOffset;
+      const row = coords.y - offset.yOffset;
+      if (col < 0 || col >= offset.width || row < 0 || row >= offset.height) return '';
+      return bomTileUrl(layerId, tileMatrixSet, z, col, row, time);
+    },
+    createTile: function(coords, done) {
+      const tile = document.createElement('img');
+      tile.alt = '';
+      const url = this.getTileUrl(coords);
+      if (!url) {
+        tile.src = TRANSPARENT_PIXEL;
+        setTimeout(() => done(null, tile), 0);
+        return tile;
+      }
+      tile.onload = () => done(null, tile);
+      tile.onerror = () => {
+        // Silently show transparent tile on error (e.g. timestamp not yet available)
+        tile.src = TRANSPARENT_PIXEL;
+        done(null, tile);
+      };
+      tile.src = url;
+      return tile;
+    },
+  });
+}
+
+
+class BomRadarCard extends HTMLElement {
+  constructor() {
+    super();
+    this.attachShadow({ mode: 'open' });
+    this._config = {};
+    this._hass = null;
+    this._map = null;
+    this._L = null;
+    this._radarLayers = [];
+    this._currentFrame = 0;
+    this._playing = true;
+    this._animationTimer = null;
+    this._timestamps = [];
+    this._initialized = false;
+    this._updateTimer = null;
+    this._resizeObserver = null;
+  }
+
+  set hass(hass) {
+    this._hass = hass;
+    if (!this._initialized) {
+      this._init();
+    }
+  }
+
+  setConfig(config) {
+    if (!config) throw new Error('Invalid configuration');
+    this._config = {
+      center_latitude: config.center_latitude,
+      center_longitude: config.center_longitude,
+      zoom_level: Math.min(8, Math.max(3, config.zoom_level || 6)),
+      frame_count: Math.min(9, Math.max(1, config.frame_count || 9)),
+      frame_delay: config.frame_delay || 500,
+      restart_delay: config.restart_delay || 1500,
+      layer: config.layer || 'rain_rate',
+      show_marker: config.show_marker !== false,
+      show_zoom: config.show_zoom !== false,
+      show_playback: config.show_playback !== false,
+      show_attribution: config.show_attribution !== false,
+      show_layer_label: config.show_layer_label === true,
+      map_height: config.map_height || 300,
+      dark_basemap: config.dark_basemap !== false,
+      marker_latitude: config.marker_latitude,
+      marker_longitude: config.marker_longitude,
+      radar_opacity: Math.min(1, Math.max(0.1, config.radar_opacity || 0.7)),
+      card_mod: config.card_mod,
+    };
+  }
+
+  getCardSize() {
+    return Math.ceil(this._config.map_height / 50);
+  }
+
+  static getConfigElement() {
+    return document.createElement('bom-radar-card-editor');
+  }
+
+  static getStubConfig() {
+    return {
+      layer: 'rain_rate',
+      zoom_level: 6,
+      map_height: 300,
+    };
+  }
+
+  async _init() {
+    if (this._initialized) return;
+    this._initialized = true;
+
+    const layerConfig = BOM_LAYERS[this._config.layer] || BOM_LAYERS.rain_rate;
+
+    this.shadowRoot.innerHTML = `
+      <style>${LEAFLET_CSS}${CARD_CSS}</style>
+      <ha-card>
+        <div class="card-content">
+          ${this._config.show_layer_label ? `<div class="layer-badge">${layerConfig.name}</div>` : ''}
+          <div id="map" style="height: ${this._config.map_height}px"></div>
+          <div class="loading-overlay" id="loading">
+            <div class="spinner"></div>
+            <div class="loading-text">Loading radar data</div>
+          </div>
+          ${this._config.show_playback ? `
+          <div class="controls">
+            <button class="play-btn" id="play-btn" aria-label="Play/Pause">${ICON_PAUSE}</button>
+            <div class="timeline" id="timeline"></div>
+            <span class="time-label" id="time-label">--:--</span>
+          </div>` : ''}
+        </div>
+      </ha-card>
+    `;
+
+    try {
+      this._L = await loadLeaflet();
+      await this._initMap(this._L);
+      // Fade out loading overlay
+      const loading = this.shadowRoot.getElementById('loading');
+      if (loading) {
+        loading.classList.add('hidden');
+        setTimeout(() => loading.remove(), 300);
+      }
+    } catch (err) {
+      console.error('BOM Radar Card: Failed to initialize', err);
+      const loading = this.shadowRoot.getElementById('loading');
+      if (loading) {
+        loading.innerHTML = `<div class="error-text">Failed to load radar</div>`;
+      }
+    }
+  }
+
+  async _initMap(L) {
+    const container = this.shadowRoot.getElementById('map');
+    if (!container) return;
+
+    const lat = this._config.center_latitude ?? this._hass?.config?.latitude ?? -33.87;
+    const lon = this._config.center_longitude ?? this._hass?.config?.longitude ?? 151.21;
+
+    this._map = L.map(container, {
+      center: [lat, lon],
+      zoom: this._config.zoom_level,
+      zoomControl: false,
+      attributionControl: this._config.show_attribution,
+      maxBounds: [[-55, 95], [5, 175]],
+      minZoom: 3,
+      maxZoom: 8,
+    });
+
+    // Add zoom control to top-right
+    if (this._config.show_zoom) {
+      L.control.zoom({ position: 'topright' }).addTo(this._map);
+    }
+
+    const basemapUrl = this._config.dark_basemap
+      ? 'https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png'
+      : 'https://{s}.basemaps.cartocdn.com/voyager_nolabels/{z}/{x}/{y}{r}.png';
+
+    const labelsUrl = this._config.dark_basemap
+      ? 'https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}{r}.png'
+      : 'https://{s}.basemaps.cartocdn.com/voyager_only_labels/{z}/{x}/{y}{r}.png';
+
+    // Base tiles (below radar)
+    L.tileLayer(basemapUrl, {
+      subdomains: 'abcd',
+      maxZoom: 8,
+    }).addTo(this._map);
+
+    // Load radar data (middle layer)
+    await this._loadRadarData(L);
+
+    // Labels on top of radar
+    L.tileLayer(labelsUrl, {
+      attribution: '&copy; <a href="https://carto.com">CARTO</a> | &copy; <a href="http://www.bom.gov.au">BOM</a>',
+      subdomains: 'abcd',
+      maxZoom: 8,
+      pane: 'overlayPane',
+    }).addTo(this._map);
+
+    // Home marker
+    if (this._config.show_marker) {
+      const mLat = this._config.marker_latitude ?? lat;
+      const mLon = this._config.marker_longitude ?? lon;
+      const icon = L.divIcon({
+        className: 'marker-dot',
+        iconSize: [24, 24],
+        iconAnchor: [12, 12],
+      });
+      L.marker([mLat, mLon], { icon, interactive: false }).addTo(this._map);
+    }
+
+    this._setupControls();
+    if (this._playing) this._startAnimation();
+
+    // Auto-refresh every 5 minutes
+    this._updateTimer = setInterval(() => this._refreshData(), 300000);
+
+    // Pause animation during map interaction
+    this._map.on('movestart zoomstart', () => {
+      if (this._playing) this._stopAnimation();
+    });
+    this._map.on('moveend zoomend', () => {
+      if (this._playing) this._startAnimation();
+    });
+
+    // Handle resize
+    this._resizeObserver = new ResizeObserver(() => this._map?.invalidateSize());
+    this._resizeObserver.observe(container);
+  }
+
+  async _loadRadarData(L) {
+    const layerConfig = BOM_LAYERS[this._config.layer] || BOM_LAYERS.rain_rate;
+    const timestamps = generateTimestamps(this._config.frame_count);
+
+    if (!timestamps.length) return;
+
+    this._timestamps = timestamps;
+
+    // Remove old layers
+    this._radarLayers.forEach(layer => {
+      if (this._map.hasLayer(layer)) this._map.removeLayer(layer);
+    });
+    this._radarLayers = [];
+
+    const BomTileLayer = createBomTileLayer(L, layerConfig.id, layerConfig.tileMatrixSet, '');
+
+    for (let i = 0; i < this._timestamps.length; i++) {
+      const time = this._timestamps[i];
+      const isLast = i === this._timestamps.length - 1;
+      const layer = new BomTileLayer('', {
+        opacity: isLast ? this._config.radar_opacity : 0,
+        maxZoom: 8,
+        minZoom: 3,
+      });
+
+      // Override with correct timestamp
+      layer.getTileUrl = function(coords) {
+        const z = coords.z;
+        const offset = getTileOffset(z);
+        if (!offset) return '';
+        const col = coords.x - offset.xOffset;
+        const row = coords.y - offset.yOffset;
+        if (col < 0 || col >= offset.width || row < 0 || row >= offset.height) return '';
+        return bomTileUrl(layerConfig.id, layerConfig.tileMatrixSet, z, col, row, time);
+      };
+
+      layer.addTo(this._map);
+      this._radarLayers.push(layer);
+    }
+
+    this._currentFrame = this._timestamps.length - 1;
+    this._updateTimeline();
+    this._updateTimeLabel();
+  }
+
+  async _refreshData() {
+    if (!this._L || !this._map) return;
+    try {
+      const wasPlaying = this._playing;
+      if (wasPlaying) this._stopAnimation();
+      await this._loadRadarData(this._L);
+      this._buildTimeline();
+      if (wasPlaying) this._startAnimation();
+    } catch (err) {
+      console.warn('BOM Radar Card: Refresh failed', err);
+    }
+  }
+
+  _setupControls() {
+    const playBtn = this.shadowRoot.getElementById('play-btn');
+    if (playBtn) {
+      playBtn.addEventListener('click', () => {
+        this._playing = !this._playing;
+        playBtn.innerHTML = this._playing ? ICON_PAUSE : ICON_PLAY;
+        if (this._playing) {
+          this._startAnimation();
+        } else {
+          this._stopAnimation();
+        }
+      });
+    }
+    this._buildTimeline();
+  }
+
+  _buildTimeline() {
+    const timeline = this.shadowRoot.getElementById('timeline');
+    if (!timeline) return;
+
+    timeline.innerHTML = '';
+    for (let i = 0; i < this._timestamps.length; i++) {
+      const dot = document.createElement('div');
+      dot.className = 'frame-dot' + (i === this._currentFrame ? ' active' : i < this._currentFrame ? ' past' : '');
+      dot.addEventListener('click', () => {
+        this._stopAnimation();
+        this._showFrame(i);
+        this._playing = false;
+        const playBtn = this.shadowRoot.getElementById('play-btn');
+        if (playBtn) playBtn.innerHTML = ICON_PLAY;
+      });
+      timeline.appendChild(dot);
+    }
+  }
+
+  _showFrame(index) {
+    for (let i = 0; i < this._radarLayers.length; i++) {
+      this._radarLayers[i].setOpacity(i === index ? this._config.radar_opacity : 0);
+    }
+    this._currentFrame = index;
+    this._updateTimeline();
+    this._updateTimeLabel();
+  }
+
+  _updateTimeline() {
+    const dots = this.shadowRoot.querySelectorAll('.frame-dot');
+    dots.forEach((dot, i) => {
+      dot.className = 'frame-dot' + (i === this._currentFrame ? ' active' : i < this._currentFrame ? ' past' : '');
+    });
+  }
+
+  _updateTimeLabel() {
+    const label = this.shadowRoot.getElementById('time-label');
+    if (!label || !this._timestamps[this._currentFrame]) return;
+
+    const time = new Date(this._timestamps[this._currentFrame]);
+    label.textContent = time.toLocaleTimeString('en-AU', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+      timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    });
+  }
+
+  _startAnimation() {
+    this._stopAnimation();
+    const advance = () => {
+      let nextFrame = this._currentFrame + 1;
+      let delay = this._config.frame_delay;
+
+      if (nextFrame >= this._timestamps.length) {
+        nextFrame = 0;
+        delay = this._config.restart_delay;
+      }
+
+      this._showFrame(nextFrame);
+      this._animationTimer = setTimeout(advance, delay);
+    };
+
+    this._animationTimer = setTimeout(advance, this._config.frame_delay);
+  }
+
+  _stopAnimation() {
+    if (this._animationTimer) {
+      clearTimeout(this._animationTimer);
+      this._animationTimer = null;
+    }
+  }
+
+  disconnectedCallback() {
+    this._stopAnimation();
+    if (this._updateTimer) {
+      clearInterval(this._updateTimer);
+      this._updateTimer = null;
+    }
+    if (this._resizeObserver) {
+      this._resizeObserver.disconnect();
+      this._resizeObserver = null;
+    }
+    if (this._map) {
+      this._map.remove();
+      this._map = null;
+    }
+  }
+}
+
+
+// Visual config editor
+class BomRadarCardEditor extends HTMLElement {
+  constructor() {
+    super();
+    this.attachShadow({ mode: 'open' });
+  }
+
+  set hass(hass) {
+    this._hass = hass;
+  }
+
+  setConfig(config) {
+    this._config = { ...config };
+    this._render();
+  }
+
+  _render() {
+    const cfg = this._config;
+    this.shadowRoot.innerHTML = `
+      <style>
+        .editor { padding:16px; }
+        .section { margin-bottom:14px; }
+        .section-title { font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.8px; color:var(--secondary-text-color); margin-bottom:8px; }
+        .row { margin-bottom:8px; }
+        .row-inline { display:flex; gap:12px; }
+        .row-inline>.row { flex:1; }
+        label { display:block; font-size:12px; font-weight:500; margin-bottom:4px; color:var(--primary-text-color); }
+        select,input[type="number"] { width:100%; padding:8px 10px; border:1px solid var(--divider-color); border-radius:10px; background:var(--card-background-color); color:var(--primary-text-color); font-size:14px; box-sizing:border-box; }
+        select:focus,input:focus { outline:none; border-color:#00BCD4; }
+        .toggle-row { display:flex; align-items:center; justify-content:space-between; padding:4px 0; }
+        .toggle-label { font-size:13px; color:var(--primary-text-color); }
+        .toggle { position:relative; width:36px; height:20px; flex-shrink:0; }
+        .toggle input { opacity:0; width:0; height:0; }
+        .toggle-slider { position:absolute; cursor:pointer; inset:0; background:rgba(255,255,255,0.12); border-radius:10px; transition:background 0.2s; }
+        .toggle-slider::before { position:absolute; content:''; height:16px; width:16px; left:2px; bottom:2px; background:#fff; border-radius:50%; transition:transform 0.2s; }
+        .toggle input:checked+.toggle-slider { background:#00BCD4; }
+        .toggle input:checked+.toggle-slider::before { transform:translateX(16px); }
+      </style>
+      <div class="editor">
+        <div class="section">
+          <div class="section-title">Radar</div>
+          <div class="row">
+            <label>Layer</label>
+            <select id="layer">
+              ${Object.entries(BOM_LAYERS).map(([key, val]) =>
+                `<option value="${key}" ${cfg.layer === key ? 'selected' : ''}>${val.name} (${val.unit})</option>`
+              ).join('')}
+            </select>
+          </div>
+          <div class="row-inline">
+            <div class="row">
+              <label>Radar Opacity</label>
+              <input type="number" id="radar_opacity" min="0.1" max="1" step="0.1" value="${cfg.radar_opacity || 0.7}">
+            </div>
+            <div class="row">
+              <label>Frames</label>
+              <input type="number" id="frame_count" min="1" max="9" value="${cfg.frame_count || 9}">
+            </div>
+          </div>
+        </div>
+
+        <div class="section">
+          <div class="section-title">Map</div>
+          <div class="row-inline">
+            <div class="row">
+              <label>Zoom (3-8)</label>
+              <input type="number" id="zoom_level" min="3" max="8" value="${cfg.zoom_level || 6}">
+            </div>
+            <div class="row">
+              <label>Height (px)</label>
+              <input type="number" id="map_height" min="150" max="800" value="${cfg.map_height || 300}">
+            </div>
+          </div>
+          <div class="row-inline">
+            <div class="row">
+              <label>Center Lat</label>
+              <input type="number" id="center_latitude" step="0.01" value="${cfg.center_latitude ?? ''}">
+            </div>
+            <div class="row">
+              <label>Center Lon</label>
+              <input type="number" id="center_longitude" step="0.01" value="${cfg.center_longitude ?? ''}">
+            </div>
+          </div>
+        </div>
+
+        <div class="section">
+          <div class="section-title">Animation</div>
+          <div class="row-inline">
+            <div class="row">
+              <label>Frame Delay (ms)</label>
+              <input type="number" id="frame_delay" min="100" max="2000" step="50" value="${cfg.frame_delay || 500}">
+            </div>
+            <div class="row">
+              <label>Loop Pause (ms)</label>
+              <input type="number" id="restart_delay" min="500" max="5000" step="100" value="${cfg.restart_delay || 1500}">
+            </div>
+          </div>
+        </div>
+
+        <div class="section">
+          <div class="section-title">Display</div>
+          ${this._toggle('dark_basemap', 'Dark basemap', cfg.dark_basemap !== false)}
+          ${this._toggle('show_marker', 'Home marker', cfg.show_marker !== false)}
+          ${this._toggle('show_zoom', 'Zoom controls', cfg.show_zoom !== false)}
+          ${this._toggle('show_playback', 'Playback controls', cfg.show_playback !== false)}
+          ${this._toggle('show_layer_label', 'Layer label', cfg.show_layer_label !== false)}
+          ${this._toggle('show_attribution', 'Attribution', cfg.show_attribution !== false)}
+        </div>
+
+        <div class="section">
+          <div class="section-title">Marker Position</div>
+          <div class="row-inline">
+            <div class="row">
+              <label>Marker Lat</label>
+              <input type="number" id="marker_latitude" step="0.01" value="${cfg.marker_latitude ?? ''}">
+            </div>
+            <div class="row">
+              <label>Marker Lon</label>
+              <input type="number" id="marker_longitude" step="0.01" value="${cfg.marker_longitude ?? ''}">
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+
+    // Bind events
+    const fields = [
+      'layer', 'zoom_level', 'map_height', 'center_latitude', 'center_longitude',
+      'frame_delay', 'restart_delay', 'radar_opacity', 'frame_count',
+      'marker_latitude', 'marker_longitude',
+    ];
+    fields.forEach(id => {
+      const el = this.shadowRoot.getElementById(id);
+      if (el) el.addEventListener('change', () => this._valueChanged());
+    });
+
+    const toggles = [
+      'dark_basemap', 'show_marker', 'show_zoom', 'show_playback',
+      'show_layer_label', 'show_attribution',
+    ];
+    toggles.forEach(id => {
+      const el = this.shadowRoot.getElementById(id);
+      if (el) el.addEventListener('change', () => this._valueChanged());
+    });
+  }
+
+  _toggle(id, label, checked) {
+    return `
+      <div class="toggle-row">
+        <span class="toggle-label">${label}</span>
+        <label class="toggle">
+          <input type="checkbox" id="${id}" ${checked ? 'checked' : ''}>
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+    `;
+  }
+
+  _valueChanged() {
+    const config = { ...this._config };
+
+    const get = (id) => this.shadowRoot.getElementById(id);
+
+    const layer = get('layer');
+    if (layer) config.layer = layer.value;
+
+    const numFields = {
+      zoom_level: 'int', map_height: 'int', frame_delay: 'int',
+      restart_delay: 'int', frame_count: 'int',
+      center_latitude: 'float', center_longitude: 'float',
+      marker_latitude: 'float', marker_longitude: 'float',
+      radar_opacity: 'float',
+    };
+
+    Object.entries(numFields).forEach(([id, type]) => {
+      const el = get(id);
+      if (!el) return;
+      if (el.value === '') {
+        delete config[id];
+      } else {
+        config[id] = type === 'int' ? parseInt(el.value) : parseFloat(el.value);
+      }
+    });
+
+    const toggleFields = [
+      'dark_basemap', 'show_marker', 'show_zoom', 'show_playback',
+      'show_layer_label', 'show_attribution',
+    ];
+    toggleFields.forEach(id => {
+      const el = get(id);
+      if (el) config[id] = el.checked;
+    });
+
+    this._config = config;
+    this.dispatchEvent(new CustomEvent('config-changed', { detail: { config } }));
+  }
+}
+
+customElements.define('bom-radar-card', BomRadarCard);
+customElements.define('bom-radar-card-editor', BomRadarCardEditor);
+
+window.customCards = window.customCards || [];
+window.customCards.push({
+  type: 'bom-radar-card',
+  name: 'BOM Radar Card',
+  description: 'Australian Bureau of Meteorology rain radar using native BOM WMTS tiles',
+  preview: true,
+  documentationURL: 'https://github.com/AshtonAU/bom-radar-card',
+});
