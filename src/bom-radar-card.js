@@ -711,6 +711,8 @@ class BomRadarCard extends HTMLElement {
 
       if (nextFrame >= this._timestamps.length) {
         nextFrame = 0;
+      }
+      if (nextFrame === this._timestamps.length - 1) {
         delay = this._config.restart_delay;
       }
 
