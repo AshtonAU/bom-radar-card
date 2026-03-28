@@ -319,6 +319,34 @@ ha-card {
   0% { transform: translate(-50%, -50%) scale(0.8); opacity: 1; }
   100% { transform: translate(-50%, -50%) scale(2); opacity: 0; }
 }
+
+/* Light theme overrides */
+.light-controls .leaflet-control-zoom{box-shadow:0 2px 8px rgba(0,0,0,0.15)}
+.light-controls .leaflet-control-zoom a{background-color:rgba(255,255,255,0.95);color:rgba(0,0,0,0.7);border-bottom-color:rgba(0,0,0,0.08)}
+.light-controls .leaflet-control-zoom a:hover{background-color:rgba(240,240,240,0.95);color:black}
+.light-controls .leaflet-touch .leaflet-control-zoom a{background-color:rgba(255,255,255,0.95);color:rgba(0,0,0,0.7)}
+.light-controls .controls {
+  background: rgba(255, 255, 255, 0.95);
+  border-color: rgba(0, 0, 0, 0.08);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+}
+.light-controls .play-btn { color: rgba(0, 0, 0, 0.7); }
+.light-controls .play-btn:hover { background: rgba(0, 0, 0, 0.08); }
+.light-controls .frame-dot { background: rgba(0, 188, 212, 0.2); }
+.light-controls .frame-dot:hover { background: rgba(0, 188, 212, 0.4); }
+.light-controls .frame-dot.active { background: #00BCD4; }
+.light-controls .frame-dot.past { background: rgba(0, 188, 212, 0.35); }
+.light-controls .time-label { color: rgba(0, 0, 0, 0.6); }
+.light-controls .layer-badge {
+  background: rgba(255, 255, 255, 0.9);
+  border-color: rgba(0, 0, 0, 0.08);
+  color: rgba(0, 0, 0, 0.55);
+}
+.light-controls #map { background: #f2f2f2; }
+.light-controls .loading-overlay { background: rgba(255, 255, 255, 0.6); }
+.light-controls .loading-text { color: rgba(0, 0, 0, 0.4); }
+.light-controls .leaflet-control-attribution{background:rgba(255,255,255,0.8)!important;color:rgba(0,0,0,0.4)}
+.light-controls .leaflet-control-attribution a{color:rgba(0,100,180,0.6)}
 `;
 
 function loadLeaflet() {
@@ -412,6 +440,12 @@ class BomRadarCard extends HTMLElement {
     this._resizeObserver = null;
   }
 
+  connectedCallback() {
+    if (this._map) {
+      requestAnimationFrame(() => this._map?.invalidateSize());
+    }
+  }
+
   set hass(hass) {
     this._hass = hass;
     if (!this._initialized) {
@@ -435,12 +469,19 @@ class BomRadarCard extends HTMLElement {
       show_attribution: config.show_attribution !== false,
       show_layer_label: config.show_layer_label === true,
       map_height: config.map_height || 300,
-      dark_basemap: config.dark_basemap !== false,
+      theme: ['auto', 'light', 'dark'].includes(config.theme) ? config.theme : (config.dark_basemap === false ? 'light' : 'auto'),
       marker_latitude: config.marker_latitude,
       marker_longitude: config.marker_longitude,
       radar_opacity: Math.min(1, Math.max(0.1, config.radar_opacity || 0.7)),
       card_mod: config.card_mod,
     };
+  }
+
+  _isDarkTheme() {
+    if (this._config.theme === 'dark') return true;
+    if (this._config.theme === 'light') return false;
+    if (this._hass && this._hass.themes) return this._hass.themes.darkMode !== false;
+    return true;
   }
 
   getCardSize() {
@@ -468,7 +509,7 @@ class BomRadarCard extends HTMLElement {
     this.shadowRoot.innerHTML = `
       <style>${LEAFLET_CSS}${CARD_CSS}</style>
       <ha-card>
-        <div class="card-content">
+        <div class="card-content${!this._isDarkTheme() ? ' light-controls' : ''}">
           ${this._config.show_layer_label ? `<div class="layer-badge">${layerConfig.name}</div>` : ''}
           <div id="map" style="height: ${this._config.map_height}px"></div>
           <div class="loading-overlay" id="loading">
@@ -525,11 +566,12 @@ class BomRadarCard extends HTMLElement {
       L.control.zoom({ position: 'topright' }).addTo(this._map);
     }
 
-    const basemapUrl = this._config.dark_basemap
+    const isDark = this._isDarkTheme();
+    const basemapUrl = isDark
       ? 'https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png'
       : 'https://{s}.basemaps.cartocdn.com/voyager_nolabels/{z}/{x}/{y}{r}.png';
 
-    const labelsUrl = this._config.dark_basemap
+    const labelsUrl = isDark
       ? 'https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}{r}.png'
       : 'https://{s}.basemaps.cartocdn.com/voyager_only_labels/{z}/{x}/{y}{r}.png';
 
@@ -742,6 +784,7 @@ class BomRadarCard extends HTMLElement {
       this._map.remove();
       this._map = null;
     }
+    this._initialized = false;
   }
 }
 
@@ -847,7 +890,14 @@ class BomRadarCardEditor extends HTMLElement {
 
         <div class="section">
           <div class="section-title">Display</div>
-          ${this._toggle('dark_basemap', 'Dark basemap', cfg.dark_basemap !== false)}
+          <div class="row">
+            <label>Theme</label>
+            <select id="theme">
+              <option value="auto" ${(cfg.theme || 'auto') === 'auto' ? 'selected' : ''}>Auto (from HA)</option>
+              <option value="light" ${cfg.theme === 'light' ? 'selected' : ''}>Light</option>
+              <option value="dark" ${cfg.theme === 'dark' ? 'selected' : ''}>Dark</option>
+            </select>
+          </div>
           ${this._toggle('show_marker', 'Home marker', cfg.show_marker !== false)}
           ${this._toggle('show_zoom', 'Zoom controls', cfg.show_zoom !== false)}
           ${this._toggle('show_playback', 'Playback controls', cfg.show_playback !== false)}
@@ -873,7 +923,7 @@ class BomRadarCardEditor extends HTMLElement {
 
     // Bind events
     const fields = [
-      'layer', 'zoom_level', 'map_height', 'center_latitude', 'center_longitude',
+      'layer', 'theme', 'zoom_level', 'map_height', 'center_latitude', 'center_longitude',
       'frame_delay', 'restart_delay', 'radar_opacity', 'frame_count',
       'marker_latitude', 'marker_longitude',
     ];
@@ -883,7 +933,7 @@ class BomRadarCardEditor extends HTMLElement {
     });
 
     const toggles = [
-      'dark_basemap', 'show_marker', 'show_zoom', 'show_playback',
+      'show_marker', 'show_zoom', 'show_playback',
       'show_layer_label', 'show_attribution',
     ];
     toggles.forEach(id => {
@@ -912,6 +962,9 @@ class BomRadarCardEditor extends HTMLElement {
     const layer = get('layer');
     if (layer) config.layer = layer.value;
 
+    const theme = get('theme');
+    if (theme) config.theme = theme.value;
+
     const numFields = {
       zoom_level: 'int', map_height: 'int', frame_delay: 'int',
       restart_delay: 'int', frame_count: 'int',
@@ -931,7 +984,7 @@ class BomRadarCardEditor extends HTMLElement {
     });
 
     const toggleFields = [
-      'dark_basemap', 'show_marker', 'show_zoom', 'show_playback',
+      'show_marker', 'show_zoom', 'show_playback',
       'show_layer_label', 'show_attribution',
     ];
     toggleFields.forEach(id => {
@@ -939,6 +992,7 @@ class BomRadarCardEditor extends HTMLElement {
       if (el) config[id] = el.checked;
     });
 
+    delete config.dark_basemap;
     this._config = config;
     this.dispatchEvent(new CustomEvent('config-changed', { detail: { config } }));
   }

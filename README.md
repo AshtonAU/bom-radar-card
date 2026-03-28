@@ -15,7 +15,7 @@ This is the **first and only** HA card that uses BOM's new WMTS API (launched wi
 - **Interactive map** — Zoom, pan, powered by Leaflet.js
 - **Animated timeline** — Up to 9 frames (45 minutes) of radar history with play/pause and scrubbing
 - **Multiple radar layers** — Rain rate, reflectivity, 1hr/24hr accumulation
-- **Dark theme** — CartoDB Dark Matter basemap with labels rendered above radar for readability
+- **Auto/light/dark theme** — Follows your HA profile theme, or set manually. CartoDB basemap with labels rendered above radar for readability
 - **Pulsing home marker** — Shows your location on the map
 - **GUI editor** — Full visual configuration with toggle switches
 - **Auto-refresh** — Updates every 5 minutes matching BOM's update cycle
@@ -78,7 +78,7 @@ That's it — it will use your Home Assistant location as the default center.
 | `show_playback` | boolean | `true` | Show timeline controls |
 | `show_layer_label` | boolean | `false` | Show layer name badge |
 | `show_attribution` | boolean | `true` | Show map attribution |
-| `dark_basemap` | boolean | `true` | Use dark map theme |
+| `theme` | string | `auto` | Map theme: `auto` (follows HA profile), `light`, or `dark` |
 
 ### Example
 
@@ -91,7 +91,7 @@ layer: rain_rate
 map_height: 350
 frame_delay: 400
 radar_opacity: 0.7
-dark_basemap: true
+theme: auto
 show_marker: true
 ```
 
