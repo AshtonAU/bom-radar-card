@@ -763,6 +763,7 @@ class BomRadarCard extends HTMLElement {
       this._map.remove();
       this._map = null;
     }
+    this._initialized = false;
   }
 }
 
@@ -872,7 +873,7 @@ class BomRadarCardEditor extends HTMLElement {
           ${this._toggle('show_marker', 'Home marker', cfg.show_marker !== false)}
           ${this._toggle('show_zoom', 'Zoom controls', cfg.show_zoom !== false)}
           ${this._toggle('show_playback', 'Playback controls', cfg.show_playback !== false)}
-          ${this._toggle('show_layer_label', 'Layer label', cfg.show_layer_label !== false)}
+          ${this._toggle('show_layer_label', 'Layer label', cfg.show_layer_label === true)}
           ${this._toggle('show_attribution', 'Attribution', cfg.show_attribution !== false)}
         </div>
 
