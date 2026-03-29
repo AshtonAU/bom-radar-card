@@ -65,7 +65,7 @@ That's it — it will use your Home Assistant location as the default center.
 | `layer` | string | `rain_rate` | Radar layer (see table below) |
 | `center_latitude` | number | HA config | Map center latitude |
 | `center_longitude` | number | HA config | Map center longitude |
-| `zoom_level` | number | `6` | Map zoom level (3–8) |
+| `zoom_level` | number | `6` | Map zoom level (3–12). Levels 9–12 overzoom native radar for a closer city view |
 | `map_height` | number | `300` | Card height in pixels |
 | `radar_opacity` | number | `0.7` | Radar overlay opacity (0.1–1.0) |
 | `frame_count` | number | `9` | Number of animation frames (1–9) |
@@ -118,7 +118,7 @@ The popular `weather-radar-card` uses RainViewer, which reprocesses BOM data wit
 - **Data source**: BOM WMTS at `api.bom.gov.au`
 - **Tile format**: 256×256 PNG with transparency
 - **Projection**: Custom Australian-extent TileMatrixSet based on EPSG:3857
-- **Max zoom**: Level 8 (~1km resolution)
+- **Max zoom**: Level 12 display, with native radar imagery through level 8 and overzoom above that
 - **Map library**: Leaflet.js 1.9.4 (loaded from CDN)
 - **Basemap**: CartoDB Dark Matter / Voyager (split labels-over-radar)
 - **Update cycle**: 5 minutes (matching BOM's data refresh)
