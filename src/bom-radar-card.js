@@ -527,11 +527,11 @@ class BomRadarCard extends HTMLElement {
 
     const basemapUrl = this._config.dark_basemap
       ? 'https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png'
-      : 'https://{s}.basemaps.cartocdn.com/voyager_nolabels/{z}/{x}/{y}{r}.png';
+      : 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager_nolabels/{z}/{x}/{y}{r}.png';
 
     const labelsUrl = this._config.dark_basemap
       ? 'https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}{r}.png'
-      : 'https://{s}.basemaps.cartocdn.com/voyager_only_labels/{z}/{x}/{y}{r}.png';
+      : 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager_only_labels/{z}/{x}/{y}{r}.png';
 
     // Base tiles (below radar)
     L.tileLayer(basemapUrl, {
