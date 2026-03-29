@@ -59,6 +59,10 @@ const TILE_MATRIX_INFO = [
   { z: 8, tlx: 11584952, tly: -740105.880375, w: 43, h: 33 },
 ];
 
+const MIN_MAP_ZOOM = 3;
+const MAX_RADAR_NATIVE_ZOOM = TILE_MATRIX_INFO[TILE_MATRIX_INFO.length - 1].z;
+const MAX_DISPLAY_ZOOM = 12;
+
 const WORLD_EXTENT = 40075016.68;
 const HALF_EXTENT = 20037508.34;
 
@@ -66,7 +70,7 @@ const HALF_EXTENT = 20037508.34;
 const TRANSPARENT_PIXEL = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
 
 function getTileOffset(z) {
-  if (z < 0 || z > 8) return null;
+  if (z < 0 || z > MAX_RADAR_NATIVE_ZOOM) return null;
   const info = TILE_MATRIX_INFO[z];
   const tileSpan = WORLD_EXTENT / Math.pow(2, z);
   return {
@@ -364,11 +368,18 @@ function bomTileUrl(layerId, tileMatrixSet, z, col, row, time) {
 function createBomTileLayer(L, layerId, tileMatrixSet, time) {
   return L.TileLayer.extend({
     getTileUrl: function(coords) {
-      const z = coords.z;
+      const z = Math.min(coords.z, MAX_RADAR_NATIVE_ZOOM);
+      const zoomScale = Math.pow(2, coords.z - z);
+      const nativeCoords = zoomScale > 1
+        ? {
+            x: Math.floor(coords.x / zoomScale),
+            y: Math.floor(coords.y / zoomScale),
+          }
+        : coords;
       const offset = getTileOffset(z);
       if (!offset) return '';
-      const col = coords.x - offset.xOffset;
-      const row = coords.y - offset.yOffset;
+      const col = nativeCoords.x - offset.xOffset;
+      const row = nativeCoords.y - offset.yOffset;
       if (col < 0 || col >= offset.width || row < 0 || row >= offset.height) return '';
       return bomTileUrl(layerId, tileMatrixSet, z, col, row, time);
     },
@@ -424,7 +435,7 @@ class BomRadarCard extends HTMLElement {
     this._config = {
       center_latitude: config.center_latitude,
       center_longitude: config.center_longitude,
-      zoom_level: Math.min(8, Math.max(3, config.zoom_level || 6)),
+      zoom_level: Math.min(MAX_DISPLAY_ZOOM, Math.max(MIN_MAP_ZOOM, config.zoom_level || 6)),
       frame_count: Math.min(9, Math.max(1, config.frame_count || 9)),
       frame_delay: config.frame_delay || 500,
       restart_delay: config.restart_delay || 1500,
@@ -516,8 +527,8 @@ class BomRadarCard extends HTMLElement {
       zoomControl: false,
       attributionControl: this._config.show_attribution,
       maxBounds: [[-55, 95], [5, 175]],
-      minZoom: 3,
-      maxZoom: 8,
+      minZoom: MIN_MAP_ZOOM,
+      maxZoom: MAX_DISPLAY_ZOOM,
     });
 
     // Add zoom control to top-right
@@ -536,7 +547,7 @@ class BomRadarCard extends HTMLElement {
     // Base tiles (below radar)
     L.tileLayer(basemapUrl, {
       subdomains: 'abcd',
-      maxZoom: 8,
+      maxZoom: MAX_DISPLAY_ZOOM,
     }).addTo(this._map);
 
     // Load radar data (middle layer)
@@ -546,7 +557,7 @@ class BomRadarCard extends HTMLElement {
     L.tileLayer(labelsUrl, {
       attribution: '&copy; <a href="https://carto.com">CARTO</a> | &copy; <a href="http://www.bom.gov.au">BOM</a>',
       subdomains: 'abcd',
-      maxZoom: 8,
+      maxZoom: MAX_DISPLAY_ZOOM,
       pane: 'overlayPane',
     }).addTo(this._map);
 
@@ -602,17 +613,25 @@ class BomRadarCard extends HTMLElement {
       const isLast = i === this._timestamps.length - 1;
       const layer = new BomTileLayer('', {
         opacity: isLast ? this._config.radar_opacity : 0,
-        maxZoom: 8,
-        minZoom: 3,
+        maxZoom: MAX_DISPLAY_ZOOM,
+        maxNativeZoom: MAX_RADAR_NATIVE_ZOOM,
+        minZoom: MIN_MAP_ZOOM,
       });
 
       // Override with correct timestamp
       layer.getTileUrl = function(coords) {
-        const z = coords.z;
+        const z = Math.min(coords.z, MAX_RADAR_NATIVE_ZOOM);
+        const zoomScale = Math.pow(2, coords.z - z);
+        const nativeCoords = zoomScale > 1
+          ? {
+              x: Math.floor(coords.x / zoomScale),
+              y: Math.floor(coords.y / zoomScale),
+            }
+          : coords;
         const offset = getTileOffset(z);
         if (!offset) return '';
-        const col = coords.x - offset.xOffset;
-        const row = coords.y - offset.yOffset;
+        const col = nativeCoords.x - offset.xOffset;
+        const row = nativeCoords.y - offset.yOffset;
         if (col < 0 || col >= offset.width || row < 0 || row >= offset.height) return '';
         return bomTileUrl(layerConfig.id, layerConfig.tileMatrixSet, z, col, row, time);
       };
@@ -813,8 +832,8 @@ class BomRadarCardEditor extends HTMLElement {
           <div class="section-title">Map</div>
           <div class="row-inline">
             <div class="row">
-              <label>Zoom (3-8)</label>
-              <input type="number" id="zoom_level" min="3" max="8" value="${cfg.zoom_level || 6}">
+              <label>Zoom (3-12)</label>
+              <input type="number" id="zoom_level" min="3" max="12" value="${cfg.zoom_level || 6}">
             </div>
             <div class="row">
               <label>Height (px)</label>
