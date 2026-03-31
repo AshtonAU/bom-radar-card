@@ -25,6 +25,7 @@ Current release: **v1.2.0**
 - **Interactive map** — Zoom, pan, powered by Leaflet.js
 - **Animated timeline** — Up to 9 frames (45 minutes) of radar history with play/pause and scrubbing
 - **Multiple radar layers** — Rain rate, reflectivity, 1hr/24hr accumulation
+- **Radar legend** — BOM-style colour legend for rain rate and reflectivity layers
 - **Dark theme** — CartoDB Dark Matter basemap with labels rendered above radar for readability
 - **Pulsing home marker** — Shows your location on the map
 - **GUI editor** — Full visual configuration with toggle switches
@@ -34,10 +35,10 @@ Current release: **v1.2.0**
 
 ## How It Works
 
-The card computes BOM's radar timestamps (5-minute intervals) and loads 256x256 PNG radar tiles as overlays on an interactive dark map. The basemap is split into layers — base tiles below radar, labels above — so place names are always readable through the radar overlay.
+The card reads BOM's published WMTS time dimension and loads 256x256 PNG radar tiles as overlays on an interactive dark map. The basemap is split into layers — base tiles below radar, labels above — so place names are always readable through the radar overlay.
 
 **Data flow:**
-1. Compute latest radar timestamps (5-min intervals, 9 frames)
+1. Read the latest published timestamps from BOM's WMTS capabilities
 2. Load PNG radar tiles for each timestamp at the current map view
 3. Animate through frames with frosted-glass timeline controls
 4. Auto-refresh every 5 minutes
@@ -87,6 +88,8 @@ That's it — it will use your Home Assistant location as the default center.
 | `show_zoom` | boolean | `true` | Show zoom controls |
 | `show_recenter` | boolean | `true` | Show recenter button for home location |
 | `show_playback` | boolean | `true` | Show timeline controls |
+| `show_legend` | boolean | `true` | Show BOM-style legend for rain rate and reflectivity layers |
+| `square_style` | boolean | `false` | Use square corners for the card chrome and controls |
 | `show_layer_label` | boolean | `false` | Show layer name badge |
 | `show_attribution` | boolean | `true` | Show map attribution |
 | `dark_basemap` | boolean | `true` | Use dark map theme |
@@ -104,6 +107,7 @@ frame_delay: 400
 radar_opacity: 0.7
 dark_basemap: true
 show_marker: true
+square_style: false
 ```
 
 ## Available Radar Layers
@@ -114,6 +118,8 @@ show_marker: true
 | `reflectivity` | Raw radar reflectivity in dBZ | Every 5 minutes |
 | `accumulation_1hr` | Estimated 1-hour rainfall accumulation | Every 5 minutes |
 | `accumulation_24hr` | 24-hour rainfall accumulation | Daily |
+
+`show_legend` currently applies to the rain rate and reflectivity layers, where BOM exposes a qualitative rain-intensity legend. Accumulation layers continue to render without a legend for now.
 
 ## Why Not RainViewer?
 

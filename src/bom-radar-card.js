@@ -16,6 +16,7 @@ console.info(
 
 // BOM WMTS Configuration
 const BOM_WMTS_BASE = 'https://api.bom.gov.au/apikey/v1/mapping/timeseries/wmts';
+const BOM_WMTS_CAPABILITIES_URL = `${BOM_WMTS_BASE}?SERVICE=WMTS&REQUEST=GetCapabilities&VERSION=1.0.0`;
 
 // Available radar layers
 const BOM_LAYERS = {
@@ -24,25 +25,33 @@ const BOM_LAYERS = {
     name: 'Rain Rate',
     unit: 'mm/h',
     tileMatrixSet: 'GoogleMapsCompatible_BoM',
+    legendType: 'rainRadar',
   },
   'reflectivity': {
     id: 'atm_surf_air_precip_reflectivity_dbz',
     name: 'Reflectivity',
     unit: 'dBZ',
     tileMatrixSet: 'GoogleMapsCompatible_BoM',
+    legendType: 'rainRadar',
   },
   'accumulation_1hr': {
     id: 'atm_surf_air_precip_accumulation_1hr_total_mm',
     name: 'Rain 1hr',
     unit: 'mm',
     tileMatrixSet: 'GoogleMapsCompatible_BoM',
+    legendType: 'numerical',
   },
   'accumulation_24hr': {
     id: 'atm_surf_air_precip_accumulation_24hr_total_mm',
     name: 'Rain 24hr',
     unit: 'mm',
     tileMatrixSet: 'GoogleMapsCompatible_BoM',
+    legendType: 'numerical',
   },
+};
+
+const RADAR_LEGEND = {
+  gradient: 'linear-gradient(90deg, rgb(245, 245, 255) 0%, rgb(180, 180, 255) 7%, rgb(120, 120, 255) 14%, rgb(20, 20, 255) 21%, rgb(0, 216, 195) 28%, rgb(0, 150, 144) 35%, rgb(0, 102, 102) 42%, rgb(255, 255, 0) 49%, rgb(255, 200, 0) 56%, rgb(255, 150, 0) 63%, rgb(255, 100, 0) 70%, rgb(255, 0, 0) 77%, rgb(200, 0, 0) 84%, rgb(120, 0, 0) 91%, rgb(40, 0, 0) 100%)',
 };
 
 // TileMatrixSet: GoogleMapsCompatible_BoM
@@ -111,15 +120,15 @@ const LEAFLET_CSS = `
 .leaflet-bottom .leaflet-control{margin-bottom:10px}
 .leaflet-left .leaflet-control{margin-left:10px}
 .leaflet-right .leaflet-control{margin-right:10px}
-.leaflet-control-zoom{border:none;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.3)}
+.leaflet-control-zoom{border:none;border-radius:var(--bom-control-radius);overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.3)}
 .leaflet-control-zoom a{background-color:rgba(20,20,40,0.85);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);color:rgba(255,255,255,0.7);width:32px;height:32px;line-height:32px;text-align:center;text-decoration:none;display:block;border-bottom:1px solid rgba(255,255,255,0.06);transition:background 0.15s,color 0.15s}
 .leaflet-control-zoom a:hover{background-color:rgba(30,30,60,0.95);color:white}
-.leaflet-control-zoom-in{border-top-left-radius:8px;border-top-right-radius:8px}
-.leaflet-control-zoom-out{border-bottom-left-radius:8px;border-bottom-right-radius:8px;border-bottom:none}
-.leaflet-control-attribution{background:rgba(0,0,0,0.35)!important;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);color:rgba(255,255,255,0.4);font-size:9px;padding:1px 6px;border-radius:6px 0 0 0;line-height:1.4}
+.leaflet-control-zoom-in{border-top-left-radius:var(--bom-control-radius);border-top-right-radius:var(--bom-control-radius)}
+.leaflet-control-zoom-out{border-bottom-left-radius:var(--bom-control-radius);border-bottom-right-radius:var(--bom-control-radius);border-bottom:none}
+.leaflet-control-attribution{background:rgba(0,0,0,0.35)!important;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);color:rgba(255,255,255,0.4);font-size:9px;padding:1px 6px;border-radius:var(--bom-attribution-radius);line-height:1.4}
 .leaflet-control-attribution a{color:rgba(100,180,255,0.5);text-decoration:none}
 .leaflet-touch .leaflet-control-zoom a{width:36px;height:36px;line-height:36px;font-size:18px}
-.bom-recenter-control{border:none;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.3)}
+.bom-recenter-control{border:none;border-radius:var(--bom-control-radius);overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.3)}
 .bom-recenter-button{appearance:none;-webkit-appearance:none;background-color:rgba(20,20,40,0.85);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);color:rgba(255,255,255,0.7);width:32px;height:32px;padding:0;display:flex;align-items:center;justify-content:center;border:none;cursor:pointer;transition:background 0.15s,color 0.15s}
 .bom-recenter-button:hover{background-color:rgba(30,30,60,0.95);color:white}
 .bom-recenter-button svg{width:16px;height:16px}
@@ -132,17 +141,36 @@ const CARD_CSS = `
 }
 ha-card {
   overflow: hidden;
-  border-radius: var(--ha-card-border-radius, 12px);
+  border-radius: var(--bom-card-radius, var(--ha-card-border-radius, 12px));
   background: var(--ha-card-background, var(--card-background-color, rgba(26, 26, 46, 0.6)));
   box-shadow: var(--ha-card-box-shadow, none);
 }
 .card-content {
+  --bom-control-radius: 8px;
+  --bom-badge-radius: 8px;
+  --bom-bar-radius: 14px;
+  --bom-attribution-radius: 6px 0 0 0;
+  --bom-track-radius: 1.5px;
   padding: 0;
   position: relative;
 }
+.card-content.is-square {
+  --bom-card-radius: 0px;
+  --bom-control-radius: 0px;
+  --bom-badge-radius: 0px;
+  --bom-bar-radius: 0px;
+  --bom-attribution-radius: 0px;
+  --bom-track-radius: 0px;
+}
+.card-content.has-top-legend .layer-badge {
+  top: 18px;
+}
+.card-content.has-top-legend .leaflet-top .leaflet-control {
+  margin-top: 22px;
+}
 #map {
   width: 100%;
-  border-radius: var(--ha-card-border-radius, 12px);
+  border-radius: var(--bom-card-radius, var(--ha-card-border-radius, 12px));
   z-index: 0;
   background: #0d1117;
 }
@@ -161,7 +189,7 @@ ha-card {
   background: rgba(10, 10, 24, 0.8);
   backdrop-filter: blur(16px) saturate(1.8);
   -webkit-backdrop-filter: blur(16px) saturate(1.8);
-  border-radius: 14px;
+  border-radius: var(--bom-bar-radius);
   border: 1px solid rgba(255, 255, 255, 0.06);
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
 }
@@ -176,7 +204,7 @@ ha-card {
   justify-content: center;
   width: 28px;
   height: 28px;
-  border-radius: 8px;
+  border-radius: var(--bom-control-radius);
   transition: background 0.15s, transform 0.1s;
   flex-shrink: 0;
 }
@@ -203,7 +231,7 @@ ha-card {
 .frame-dot {
   flex: 1;
   height: 3px;
-  border-radius: 1.5px;
+  border-radius: var(--bom-track-radius);
   background: rgba(255, 255, 255, 0.1);
   cursor: pointer;
   transition: background 0.2s, height 0.15s, box-shadow 0.2s;
@@ -244,7 +272,7 @@ ha-card {
   background: rgba(10, 10, 24, 0.7);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
-  border-radius: 8px;
+  border-radius: var(--bom-badge-radius);
   border: 1px solid rgba(255, 255, 255, 0.06);
   color: rgba(255, 255, 255, 0.55);
   font-size: 10px;
@@ -252,6 +280,21 @@ ha-card {
   text-transform: uppercase;
   letter-spacing: 0.8px;
   pointer-events: none;
+}
+
+/* Legend */
+.legend-card {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  pointer-events: none;
+}
+.legend-scale {
+  height: 8px;
+  border-radius: 0;
+  box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.12);
 }
 
 /* Loading state */
@@ -329,9 +372,21 @@ ha-card {
   0% { transform: translate(-50%, -50%) scale(0.8); opacity: 1; }
   100% { transform: translate(-50%, -50%) scale(2); opacity: 0; }
 }
+
+@media (max-width: 480px) {
+  .card-content.has-top-legend .layer-badge {
+    top: 16px;
+  }
+  .card-content.has-top-legend .leaflet-top .leaflet-control {
+    margin-top: 20px;
+  }
+}
 `;
 
 let leafletLoadPromise = null;
+let capabilitiesLoadPromise = null;
+let capabilitiesCache = null;
+let capabilitiesFetchedAt = 0;
 
 function loadLeaflet() {
   if (window.L) {
@@ -367,8 +422,7 @@ function loadLeaflet() {
   return leafletLoadPromise;
 }
 
-// Generate radar timestamps locally (avoids CORS issues with BOM's WMTS capabilities endpoint)
-function generateTimestamps(count = 9) {
+function generateFallbackTimestamps(count = 9) {
   const now = new Date();
   const minutes = Math.floor(now.getUTCMinutes() / 5) * 5;
   const latest = new Date(Date.UTC(
@@ -384,6 +438,86 @@ function generateTimestamps(count = 9) {
     timestamps.push(t.toISOString().replace(/\.\d{3}Z$/, 'Z'));
   }
   return timestamps;
+}
+
+function getChildByLocalName(parent, name) {
+  return Array.from(parent?.children || []).find((node) => node.localName === name) || null;
+}
+
+function getChildrenByLocalName(parent, name) {
+  return Array.from(parent?.children || []).filter((node) => node.localName === name);
+}
+
+async function loadBomCapabilities() {
+  const cacheAgeMs = 4 * 60 * 1000;
+  if (capabilitiesCache && (Date.now() - capabilitiesFetchedAt) < cacheAgeMs) {
+    return capabilitiesCache;
+  }
+
+  if (capabilitiesLoadPromise) {
+    return capabilitiesLoadPromise;
+  }
+
+  capabilitiesLoadPromise = fetch(BOM_WMTS_CAPABILITIES_URL, { mode: 'cors' })
+    .then(async (response) => {
+      if (!response.ok) {
+        throw new Error(`Capabilities request failed with ${response.status}`);
+      }
+      const xmlText = await response.text();
+      const xml = new DOMParser().parseFromString(xmlText, 'application/xml');
+      if (xml.querySelector('parsererror')) {
+        throw new Error('Capabilities response could not be parsed');
+      }
+      capabilitiesCache = xml;
+      capabilitiesFetchedAt = Date.now();
+      capabilitiesLoadPromise = null;
+      return xml;
+    })
+    .catch((err) => {
+      capabilitiesLoadPromise = null;
+      throw err;
+    });
+
+  return capabilitiesLoadPromise;
+}
+
+function extractLayerTimestamps(xml, layerId) {
+  const layers = Array.from(xml.getElementsByTagNameNS('*', 'Layer'));
+  const layer = layers.find((node) => getChildByLocalName(node, 'Identifier')?.textContent?.trim() === layerId);
+  if (!layer) {
+    return [];
+  }
+
+  const dimensions = getChildrenByLocalName(layer, 'Dimension');
+  const timeDimension = dimensions.find((node) => getChildByLocalName(node, 'Identifier')?.textContent?.trim() === 'time');
+  if (!timeDimension) {
+    return [];
+  }
+
+  const values = getChildrenByLocalName(timeDimension, 'Value')
+    .map((node) => node.textContent?.trim())
+    .filter(Boolean);
+
+  const defaultValue = getChildByLocalName(timeDimension, 'Default')?.textContent?.trim();
+  if (defaultValue && !values.includes(defaultValue)) {
+    values.push(defaultValue);
+  }
+
+  return values.sort();
+}
+
+async function getLayerTimestamps(layerConfig, count = 9) {
+  try {
+    const capabilities = await loadBomCapabilities();
+    const publishedTimes = extractLayerTimestamps(capabilities, layerConfig.id);
+    if (publishedTimes.length > 0) {
+      return publishedTimes.slice(-count);
+    }
+  } catch (err) {
+    console.warn(`BOM Radar Card: Falling back to generated timestamps for ${layerConfig.id}`, err);
+  }
+
+  return generateFallbackTimestamps(count);
 }
 
 function bomTileUrl(layerId, tileMatrixSet, z, col, row, time) {
@@ -430,6 +564,33 @@ function createBomTileLayer(L, layerId, tileMatrixSet, time) {
       return tile;
     },
   });
+}
+
+function getLegendConfig(layerKey) {
+  const layer = BOM_LAYERS[layerKey];
+  if (!layer || layer.legendType !== 'rainRadar') {
+    return null;
+  }
+
+  return {
+    title: layer.name,
+    unit: layer.unit,
+    gradient: RADAR_LEGEND.gradient,
+    ariaLabel: `${layer.name} legend from light to heavy precipitation`,
+  };
+}
+
+function renderLegendHtml(layerKey) {
+  const legend = getLegendConfig(layerKey);
+  if (!legend) {
+    return '';
+  }
+
+  return `
+    <div class="legend-card" role="note" aria-label="${legend.ariaLabel}">
+      <div class="legend-scale" style="background:${legend.gradient}"></div>
+    </div>
+  `;
 }
 
 
@@ -491,6 +652,8 @@ class BomRadarCard extends HTMLElement {
       show_zoom: config.show_zoom !== false,
       show_recenter: config.show_recenter !== false,
       show_playback: config.show_playback !== false,
+      show_legend: config.show_legend !== false,
+      square_style: config.square_style === true,
       show_attribution: config.show_attribution !== false,
       show_layer_label: config.show_layer_label === true,
       map_height: config.map_height || 300,
@@ -534,12 +697,14 @@ class BomRadarCard extends HTMLElement {
     this._initialized = true;
 
     const layerConfig = BOM_LAYERS[this._config.layer] || BOM_LAYERS.rain_rate;
+    const legendConfig = this._config.show_legend ? getLegendConfig(this._config.layer) : null;
 
     this.shadowRoot.innerHTML = `
       <style>${LEAFLET_CSS}${CARD_CSS}</style>
-      <ha-card>
-        <div class="card-content">
+      <ha-card style="--bom-card-radius:${this._config.square_style ? '0px' : 'var(--ha-card-border-radius, 12px)'}">
+        <div class="card-content${legendConfig ? ' has-top-legend' : ''}${this._config.square_style ? ' is-square' : ''}">
           ${this._config.show_layer_label ? `<div class="layer-badge">${layerConfig.name}</div>` : ''}
+          ${legendConfig ? renderLegendHtml(this._config.layer) : ''}
           <div id="map" style="height: ${this._config.map_height}px"></div>
           <div class="loading-overlay" id="loading">
             <div class="spinner"></div>
@@ -678,7 +843,7 @@ class BomRadarCard extends HTMLElement {
 
   async _loadRadarData(L) {
     const layerConfig = BOM_LAYERS[this._config.layer] || BOM_LAYERS.rain_rate;
-    const timestamps = generateTimestamps(this._config.frame_count);
+    const timestamps = await getLayerTimestamps(layerConfig, this._config.frame_count);
 
     if (!timestamps.length) return;
 
@@ -958,6 +1123,8 @@ class BomRadarCardEditor extends HTMLElement {
           ${this._toggle('show_zoom', 'Zoom controls', cfg.show_zoom !== false)}
           ${this._toggle('show_recenter', 'Recenter button', cfg.show_recenter !== false)}
           ${this._toggle('show_playback', 'Playback controls', cfg.show_playback !== false)}
+          ${this._toggle('show_legend', 'Radar legend', cfg.show_legend !== false)}
+          ${this._toggle('square_style', 'Square style', cfg.square_style === true)}
           ${this._toggle('show_layer_label', 'Layer label', cfg.show_layer_label === true)}
           ${this._toggle('show_attribution', 'Attribution', cfg.show_attribution !== false)}
         </div>
@@ -991,7 +1158,7 @@ class BomRadarCardEditor extends HTMLElement {
 
     const toggles = [
       'dark_basemap', 'show_marker', 'show_zoom', 'show_recenter', 'show_playback',
-      'show_layer_label', 'show_attribution',
+      'show_legend', 'square_style', 'show_layer_label', 'show_attribution',
     ];
     toggles.forEach(id => {
       const el = this.shadowRoot.getElementById(id);
@@ -1039,7 +1206,7 @@ class BomRadarCardEditor extends HTMLElement {
 
     const toggleFields = [
       'dark_basemap', 'show_marker', 'show_zoom', 'show_recenter', 'show_playback',
-      'show_layer_label', 'show_attribution',
+      'show_legend', 'square_style', 'show_layer_label', 'show_attribution',
     ];
     toggleFields.forEach(id => {
       const el = get(id);
