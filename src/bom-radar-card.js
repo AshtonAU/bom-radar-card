@@ -6,7 +6,7 @@
  * License: MIT
  */
 
-const CARD_VERSION = '1.2.0';
+const CARD_VERSION = '1.3.0';
 
 console.info(
   `%c BOM-RADAR-CARD %c v${CARD_VERSION} `,
