@@ -6,7 +6,7 @@
  * License: MIT
  */
 
-const CARD_VERSION = '1.1.0';
+const CARD_VERSION = '1.2.0';
 
 console.info(
   `%c BOM-RADAR-CARD %c v${CARD_VERSION} `,
@@ -84,6 +84,7 @@ function getTileOffset(z) {
 // SVG icons
 const ICON_PLAY = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>';
 const ICON_PAUSE = '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>';
+const ICON_RECENTER = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v3"/><path d="M12 19v3"/><path d="M2 12h3"/><path d="M19 12h3"/></svg>';
 
 // Leaflet CSS (minimal, inlined for Shadow DOM)
 const LEAFLET_CSS = `
@@ -118,6 +119,11 @@ const LEAFLET_CSS = `
 .leaflet-control-attribution{background:rgba(0,0,0,0.35)!important;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);color:rgba(255,255,255,0.4);font-size:9px;padding:1px 6px;border-radius:6px 0 0 0;line-height:1.4}
 .leaflet-control-attribution a{color:rgba(100,180,255,0.5);text-decoration:none}
 .leaflet-touch .leaflet-control-zoom a{width:36px;height:36px;line-height:36px;font-size:18px}
+.bom-recenter-control{border:none;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.3)}
+.bom-recenter-button{appearance:none;-webkit-appearance:none;background-color:rgba(20,20,40,0.85);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);color:rgba(255,255,255,0.7);width:32px;height:32px;padding:0;display:flex;align-items:center;justify-content:center;border:none;cursor:pointer;transition:background 0.15s,color 0.15s}
+.bom-recenter-button:hover{background-color:rgba(30,30,60,0.95);color:white}
+.bom-recenter-button svg{width:16px;height:16px}
+.leaflet-touch .bom-recenter-button{width:36px;height:36px}
 `;
 
 const CARD_CSS = `
@@ -325,18 +331,40 @@ ha-card {
 }
 `;
 
+let leafletLoadPromise = null;
+
 function loadLeaflet() {
-  return new Promise((resolve, reject) => {
-    if (window.L) {
-      resolve(window.L);
+  if (window.L) {
+    return Promise.resolve(window.L);
+  }
+
+  if (leafletLoadPromise) {
+    return leafletLoadPromise;
+  }
+
+  leafletLoadPromise = new Promise((resolve, reject) => {
+    const existingScript = document.querySelector('script[data-bom-radar-leaflet]');
+    if (existingScript) {
+      existingScript.addEventListener('load', () => resolve(window.L), { once: true });
+      existingScript.addEventListener('error', () => {
+        leafletLoadPromise = null;
+        reject(new Error('Failed to load Leaflet'));
+      }, { once: true });
       return;
     }
+
     const script = document.createElement('script');
     script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+    script.dataset.bomRadarLeaflet = 'true';
     script.onload = () => resolve(window.L);
-    script.onerror = () => reject(new Error('Failed to load Leaflet'));
+    script.onerror = () => {
+      leafletLoadPromise = null;
+      reject(new Error('Failed to load Leaflet'));
+    };
     document.head.appendChild(script);
   });
+
+  return leafletLoadPromise;
 }
 
 // Generate radar timestamps locally (avoids CORS issues with BOM's WMTS capabilities endpoint)
@@ -423,6 +451,25 @@ class BomRadarCard extends HTMLElement {
     this._resizeObserver = null;
   }
 
+  connectedCallback() {
+    if (!this._initialized && this._hass && this._map === null && Object.keys(this._config).length > 0) {
+      this._init();
+    }
+  }
+
+  _getEstimatedCardHeight() {
+    const mapHeight = this._config?.map_height || 300;
+    const controlsHeight = this._config?.show_playback === false ? 0 : 64;
+    const cardPadding = 16;
+    return mapHeight + controlsHeight + cardPadding;
+  }
+
+  _getHomeCoordinates() {
+    const lat = this._config.marker_latitude ?? this._hass?.config?.latitude ?? this._config.center_latitude ?? -33.87;
+    const lon = this._config.marker_longitude ?? this._hass?.config?.longitude ?? this._config.center_longitude ?? 151.21;
+    return [lat, lon];
+  }
+
   set hass(hass) {
     this._hass = hass;
     if (!this._initialized) {
@@ -442,6 +489,7 @@ class BomRadarCard extends HTMLElement {
       layer: config.layer || 'rain_rate',
       show_marker: config.show_marker !== false,
       show_zoom: config.show_zoom !== false,
+      show_recenter: config.show_recenter !== false,
       show_playback: config.show_playback !== false,
       show_attribution: config.show_attribution !== false,
       show_layer_label: config.show_layer_label === true,
@@ -455,7 +503,18 @@ class BomRadarCard extends HTMLElement {
   }
 
   getCardSize() {
-    return Math.ceil(this._config.map_height / 50);
+    return Math.ceil(this._getEstimatedCardHeight() / 50);
+  }
+
+  getGridOptions() {
+    const rows = Math.max(4, Math.ceil((this._getEstimatedCardHeight() + 8) / 64));
+    return {
+      rows,
+      min_rows: Math.max(4, rows - 1),
+      columns: 12,
+      min_columns: 6,
+      max_columns: 12,
+    };
   }
 
   static getConfigElement() {
@@ -506,6 +565,7 @@ class BomRadarCard extends HTMLElement {
         setTimeout(() => loading.remove(), 300);
       }
     } catch (err) {
+      this._initialized = false;
       console.error('BOM Radar Card: Failed to initialize', err);
       const loading = this.shadowRoot.getElementById('loading');
       if (loading) {
@@ -535,6 +595,9 @@ class BomRadarCard extends HTMLElement {
     if (this._config.show_zoom) {
       L.control.zoom({ position: 'topright' }).addTo(this._map);
     }
+    if (this._config.show_recenter) {
+      this._addRecenterControl(L);
+    }
 
     const basemapUrl = this._config.dark_basemap
       ? 'https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png'
@@ -563,8 +626,7 @@ class BomRadarCard extends HTMLElement {
 
     // Home marker
     if (this._config.show_marker) {
-      const mLat = this._config.marker_latitude ?? lat;
-      const mLon = this._config.marker_longitude ?? lon;
+      const [mLat, mLon] = this._getHomeCoordinates();
       const icon = L.divIcon({
         className: 'marker-dot',
         iconSize: [24, 24],
@@ -590,6 +652,28 @@ class BomRadarCard extends HTMLElement {
     // Handle resize
     this._resizeObserver = new ResizeObserver(() => this._map?.invalidateSize());
     this._resizeObserver.observe(container);
+  }
+
+  _addRecenterControl(L) {
+    const control = L.control({ position: 'topright' });
+    control.onAdd = () => {
+      const container = L.DomUtil.create('div', 'leaflet-control bom-recenter-control');
+      const button = L.DomUtil.create('button', 'bom-recenter-button', container);
+      button.type = 'button';
+      button.innerHTML = ICON_RECENTER;
+      button.title = 'Recenter to home location';
+      button.setAttribute('aria-label', 'Recenter to home location');
+
+      L.DomEvent.disableClickPropagation(container);
+      L.DomEvent.disableScrollPropagation(container);
+      L.DomEvent.on(button, 'click', () => {
+        const [homeLat, homeLon] = this._getHomeCoordinates();
+        this._map?.panTo([homeLat, homeLon], { animate: true });
+      });
+
+      return container;
+    };
+    control.addTo(this._map);
   }
 
   async _loadRadarData(L) {
@@ -872,6 +956,7 @@ class BomRadarCardEditor extends HTMLElement {
           ${this._toggle('dark_basemap', 'Dark basemap', cfg.dark_basemap !== false)}
           ${this._toggle('show_marker', 'Home marker', cfg.show_marker !== false)}
           ${this._toggle('show_zoom', 'Zoom controls', cfg.show_zoom !== false)}
+          ${this._toggle('show_recenter', 'Recenter button', cfg.show_recenter !== false)}
           ${this._toggle('show_playback', 'Playback controls', cfg.show_playback !== false)}
           ${this._toggle('show_layer_label', 'Layer label', cfg.show_layer_label === true)}
           ${this._toggle('show_attribution', 'Attribution', cfg.show_attribution !== false)}
@@ -905,7 +990,7 @@ class BomRadarCardEditor extends HTMLElement {
     });
 
     const toggles = [
-      'dark_basemap', 'show_marker', 'show_zoom', 'show_playback',
+      'dark_basemap', 'show_marker', 'show_zoom', 'show_recenter', 'show_playback',
       'show_layer_label', 'show_attribution',
     ];
     toggles.forEach(id => {
@@ -953,7 +1038,7 @@ class BomRadarCardEditor extends HTMLElement {
     });
 
     const toggleFields = [
-      'dark_basemap', 'show_marker', 'show_zoom', 'show_playback',
+      'dark_basemap', 'show_marker', 'show_zoom', 'show_recenter', 'show_playback',
       'show_layer_label', 'show_attribution',
     ];
     toggleFields.forEach(id => {
@@ -966,14 +1051,30 @@ class BomRadarCardEditor extends HTMLElement {
   }
 }
 
-customElements.define('bom-radar-card', BomRadarCard);
-customElements.define('bom-radar-card-editor', BomRadarCardEditor);
+function defineCustomElement(name, ctor) {
+  if (customElements.get(name)) {
+    return;
+  }
+
+  try {
+    customElements.define(name, ctor);
+  } catch (err) {
+    if (!String(err?.message || '').includes(`the name "${name}" has already been used`)) {
+      throw err;
+    }
+  }
+}
+
+defineCustomElement('bom-radar-card', BomRadarCard);
+defineCustomElement('bom-radar-card-editor', BomRadarCardEditor);
 
 window.customCards = window.customCards || [];
-window.customCards.push({
-  type: 'bom-radar-card',
-  name: 'BOM Radar Card',
-  description: 'Australian Bureau of Meteorology rain radar using native BOM WMTS tiles',
-  preview: true,
-  documentationURL: 'https://github.com/AshtonAU/bom-radar-card',
-});
+if (!window.customCards.some((card) => card.type === 'bom-radar-card')) {
+  window.customCards.push({
+    type: 'bom-radar-card',
+    name: 'BOM Radar Card',
+    description: 'Australian Bureau of Meteorology rain radar using native BOM WMTS tiles',
+    preview: true,
+    documentationURL: 'https://github.com/AshtonAU/bom-radar-card',
+  });
+}

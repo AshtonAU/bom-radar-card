@@ -8,6 +8,9 @@ This is the **first and only** HA card that uses BOM's new WMTS API (launched wi
 [![GitHub Release](https://img.shields.io/github/v/release/AshtonAU/bom-radar-card)](https://github.com/AshtonAU/bom-radar-card/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
+> [!IMPORTANT]
+> If you previously installed another BOM radar card, remove its HACS entry and dashboard resource before adding this one. Home Assistant can keep multiple similarly named Lovelace resources loaded at the same time, which can cause broken or unpredictable behaviour. After switching cards, do a hard refresh / clear browser cache so the new resource is actually loaded.
+
 ## Features
 
 - **Native BOM data** — Direct from `api.bom.gov.au` WMTS tiles, not RainViewer or any third-party reprocessing
@@ -75,6 +78,7 @@ That's it — it will use your Home Assistant location as the default center.
 | `marker_latitude` | number | center | Marker latitude |
 | `marker_longitude` | number | center | Marker longitude |
 | `show_zoom` | boolean | `true` | Show zoom controls |
+| `show_recenter` | boolean | `true` | Show recenter button for home location |
 | `show_playback` | boolean | `true` | Show timeline controls |
 | `show_layer_label` | boolean | `false` | Show layer name badge |
 | `show_attribution` | boolean | `true` | Show map attribution |
