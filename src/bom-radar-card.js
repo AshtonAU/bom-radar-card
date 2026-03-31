@@ -670,7 +670,7 @@ class BomRadarCard extends HTMLElement {
       show_legend: config.show_legend !== false,
       square_style: config.square_style === true,
       show_attribution: config.show_attribution !== false,
-      show_layer_label: config.show_layer_label !== false,
+      show_layer_label: config.show_layer_label === true,
       map_height: config.map_height || 300,
       dark_basemap: config.dark_basemap !== false,
       marker_latitude: config.marker_latitude,
@@ -1250,7 +1250,7 @@ class BomRadarCardEditor extends HTMLElement {
           ${this._toggle('show_playback', 'Playback controls', cfg.show_playback !== false)}
           ${this._toggle('show_legend', 'Radar legend', cfg.show_legend !== false)}
           ${this._toggle('square_style', 'Square style', cfg.square_style === true)}
-          ${this._toggle('show_layer_label', 'Layer label', cfg.show_layer_label !== false)}
+          ${this._toggle('show_layer_label', 'Layer label', cfg.show_layer_label === true)}
           ${this._toggle('show_attribution', 'Attribution', cfg.show_attribution !== false)}
         </div>
 

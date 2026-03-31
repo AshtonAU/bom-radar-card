@@ -93,7 +93,7 @@ That's it — it will use your Home Assistant location as the default center.
 | `show_playback` | boolean | `true` | Show timeline controls |
 | `show_legend` | boolean | `true` | Show BOM-style legend for rain rate and reflectivity layers |
 | `square_style` | boolean | `false` | Use square corners for the card chrome and controls |
-| `show_layer_label` | boolean | `true` | Show layer name badge |
+| `show_layer_label` | boolean | `false` | Show layer name badge |
 | `show_attribution` | boolean | `true` | Show map attribution |
 | `dark_basemap` | boolean | `true` | Use dark map theme |
 
