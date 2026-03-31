@@ -1,0 +1,36 @@
+name: Feature request
+description: Suggest a specific improvement to the card
+title: "[Feature]: "
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the suggestion. For broad brainstorming, casual feedback, or setup questions, please use GitHub Discussions. Use this template for concrete feature requests you would like tracked as issues.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem would this solve?
+      description: Explain the need behind the feature request.
+      placeholder: It is hard to compare rain intensity without a legend...
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What would you like to see?
+      description: Describe the feature you want added.
+      placeholder: Add an optional legend for the current radar layer...
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Mention any workarounds or other ideas you have considered.
+  - type: textarea
+    id: context
+    attributes:
+      label: Extra context
+      description: Add screenshots, examples, or links if useful.

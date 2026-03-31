@@ -1,0 +1,66 @@
+name: Bug report
+description: Report a reproducible problem with the card
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting this. Please keep feature requests and general discussion in GitHub Discussions so issues can stay focused on tracked bugs.
+  - type: textarea
+    id: bug
+    attributes:
+      label: What happened?
+      description: Describe the problem and what you expected instead.
+      placeholder: The card goes blank after reopening Home Assistant...
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: List the exact steps needed to reproduce the issue.
+      placeholder: |
+        1. Add the card
+        2. Open the dashboard
+        3. Close and reopen Home Assistant
+        4. The map is blank
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Card version
+      description: Which BOM Radar Card version are you using?
+      placeholder: v1.2.0
+    validations:
+      required: true
+  - type: input
+    id: ha_version
+    attributes:
+      label: Home Assistant version
+      description: Which Home Assistant version are you running?
+      placeholder: 2026.3.4
+    validations:
+      required: true
+  - type: dropdown
+    id: install_method
+    attributes:
+      label: Install method
+      options:
+        - HACS
+        - Manual resource
+    validations:
+      required: true
+  - type: textarea
+    id: config
+    attributes:
+      label: Card configuration
+      description: Paste the card YAML if relevant.
+      render: yaml
+  - type: textarea
+    id: notes
+    attributes:
+      label: Anything else?
+      description: Add screenshots, console errors, or any extra context here.

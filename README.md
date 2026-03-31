@@ -13,6 +13,11 @@ Current release: **v1.2.0**
 > [!IMPORTANT]
 > If you previously installed another BOM radar card, remove its HACS entry and dashboard resource before adding this one. Home Assistant can keep multiple similarly named Lovelace resources loaded at the same time, which can cause broken or unpredictable behaviour. After switching cards, do a hard refresh / clear browser cache so the new resource is actually loaded.
 
+## Feedback And Support
+
+- Use [GitHub Discussions](https://github.com/AshtonAU/bom-radar-card/discussions) for general feedback, setup questions, ideas, and screenshots.
+- Use [GitHub Issues](https://github.com/AshtonAU/bom-radar-card/issues) for reproducible bugs and concrete feature requests.
+
 ## Features
 
 - **Native BOM data** — Direct from `api.bom.gov.au` WMTS tiles, not RainViewer or any third-party reprocessing
