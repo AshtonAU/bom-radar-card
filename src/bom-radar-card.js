@@ -325,18 +325,40 @@ ha-card {
 }
 `;
 
+let leafletLoadPromise = null;
+
 function loadLeaflet() {
-  return new Promise((resolve, reject) => {
-    if (window.L) {
-      resolve(window.L);
+  if (window.L) {
+    return Promise.resolve(window.L);
+  }
+
+  if (leafletLoadPromise) {
+    return leafletLoadPromise;
+  }
+
+  leafletLoadPromise = new Promise((resolve, reject) => {
+    const existingScript = document.querySelector('script[data-bom-radar-leaflet]');
+    if (existingScript) {
+      existingScript.addEventListener('load', () => resolve(window.L), { once: true });
+      existingScript.addEventListener('error', () => {
+        leafletLoadPromise = null;
+        reject(new Error('Failed to load Leaflet'));
+      }, { once: true });
       return;
     }
+
     const script = document.createElement('script');
     script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+    script.dataset.bomRadarLeaflet = 'true';
     script.onload = () => resolve(window.L);
-    script.onerror = () => reject(new Error('Failed to load Leaflet'));
+    script.onerror = () => {
+      leafletLoadPromise = null;
+      reject(new Error('Failed to load Leaflet'));
+    };
     document.head.appendChild(script);
   });
+
+  return leafletLoadPromise;
 }
 
 // Generate radar timestamps locally (avoids CORS issues with BOM's WMTS capabilities endpoint)
@@ -423,6 +445,19 @@ class BomRadarCard extends HTMLElement {
     this._resizeObserver = null;
   }
 
+  connectedCallback() {
+    if (!this._initialized && this._hass && this._map === null && Object.keys(this._config).length > 0) {
+      this._init();
+    }
+  }
+
+  _getEstimatedCardHeight() {
+    const mapHeight = this._config?.map_height || 300;
+    const controlsHeight = this._config?.show_playback === false ? 0 : 64;
+    const cardPadding = 16;
+    return mapHeight + controlsHeight + cardPadding;
+  }
+
   set hass(hass) {
     this._hass = hass;
     if (!this._initialized) {
@@ -455,7 +490,18 @@ class BomRadarCard extends HTMLElement {
   }
 
   getCardSize() {
-    return Math.ceil(this._config.map_height / 50);
+    return Math.ceil(this._getEstimatedCardHeight() / 50);
+  }
+
+  getGridOptions() {
+    const rows = Math.max(4, Math.ceil((this._getEstimatedCardHeight() + 8) / 64));
+    return {
+      rows,
+      min_rows: Math.max(4, rows - 1),
+      columns: 12,
+      min_columns: 6,
+      max_columns: 12,
+    };
   }
 
   static getConfigElement() {
@@ -506,6 +552,7 @@ class BomRadarCard extends HTMLElement {
         setTimeout(() => loading.remove(), 300);
       }
     } catch (err) {
+      this._initialized = false;
       console.error('BOM Radar Card: Failed to initialize', err);
       const loading = this.shadowRoot.getElementById('loading');
       if (loading) {
@@ -966,14 +1013,30 @@ class BomRadarCardEditor extends HTMLElement {
   }
 }
 
-customElements.define('bom-radar-card', BomRadarCard);
-customElements.define('bom-radar-card-editor', BomRadarCardEditor);
+function defineCustomElement(name, ctor) {
+  if (customElements.get(name)) {
+    return;
+  }
+
+  try {
+    customElements.define(name, ctor);
+  } catch (err) {
+    if (!String(err?.message || '').includes(`the name "${name}" has already been used`)) {
+      throw err;
+    }
+  }
+}
+
+defineCustomElement('bom-radar-card', BomRadarCard);
+defineCustomElement('bom-radar-card-editor', BomRadarCardEditor);
 
 window.customCards = window.customCards || [];
-window.customCards.push({
-  type: 'bom-radar-card',
-  name: 'BOM Radar Card',
-  description: 'Australian Bureau of Meteorology rain radar using native BOM WMTS tiles',
-  preview: true,
-  documentationURL: 'https://github.com/AshtonAU/bom-radar-card',
-});
+if (!window.customCards.some((card) => card.type === 'bom-radar-card')) {
+  window.customCards.push({
+    type: 'bom-radar-card',
+    name: 'BOM Radar Card',
+    description: 'Australian Bureau of Meteorology rain radar using native BOM WMTS tiles',
+    preview: true,
+    documentationURL: 'https://github.com/AshtonAU/bom-radar-card',
+  });
+}
