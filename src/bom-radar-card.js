@@ -6,7 +6,7 @@
  * License: MIT
  */
 
-const CARD_VERSION = '1.3.0';
+const CARD_VERSION = '1.4.0';
 
 console.info(
   `%c BOM-RADAR-CARD %c v${CARD_VERSION} `,
@@ -27,13 +27,6 @@ const BOM_LAYERS = {
     tileMatrixSet: 'GoogleMapsCompatible_BoM',
     legendType: 'rainRadar',
   },
-  'reflectivity': {
-    id: 'atm_surf_air_precip_reflectivity_dbz',
-    name: 'Reflectivity',
-    unit: 'dBZ',
-    tileMatrixSet: 'GoogleMapsCompatible_BoM',
-    legendType: 'rainRadar',
-  },
   'accumulation_1hr': {
     id: 'atm_surf_air_precip_accumulation_1hr_total_mm',
     name: 'Rain 1hr',
@@ -47,6 +40,13 @@ const BOM_LAYERS = {
     unit: 'mm',
     tileMatrixSet: 'GoogleMapsCompatible_BoM',
     legendType: 'numerical',
+  },
+  'reflectivity': {
+    id: 'atm_surf_air_precip_reflectivity_dbz',
+    name: 'Reflectivity',
+    unit: 'dBZ',
+    tileMatrixSet: 'GoogleMapsCompatible_BoM',
+    legendType: 'rainRadar',
   },
 };
 
@@ -94,6 +94,7 @@ function getTileOffset(z) {
 const ICON_PLAY = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>';
 const ICON_PAUSE = '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>';
 const ICON_RECENTER = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v3"/><path d="M12 19v3"/><path d="M2 12h3"/><path d="M19 12h3"/></svg>';
+const ICON_LAYERS = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4 4 8l8 4 8-4-8-4Z"/><path d="m4 12 8 4 8-4"/><path d="m4 16 8 4 8-4"/></svg>';
 
 // Leaflet CSS (minimal, inlined for Shadow DOM)
 const LEAFLET_CSS = `
@@ -133,6 +134,18 @@ const LEAFLET_CSS = `
 .bom-recenter-button:hover{background-color:rgba(30,30,60,0.95);color:white}
 .bom-recenter-button svg{width:16px;height:16px}
 .leaflet-touch .bom-recenter-button{width:36px;height:36px}
+.bom-layer-control{position:relative}
+.bom-layer-button{appearance:none;-webkit-appearance:none;background-color:rgba(20,20,40,0.85);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);color:rgba(255,255,255,0.72);width:32px;height:32px;padding:0;display:flex;align-items:center;justify-content:center;border:none;border-radius:var(--bom-control-radius);cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.3);transition:background 0.15s,color 0.15s}
+.bom-layer-button:hover,.bom-layer-button.is-open{background-color:rgba(30,30,60,0.95);color:white}
+.bom-layer-button svg{width:16px;height:16px}
+.bom-layer-panel{position:absolute;top:0;right:40px;min-width:156px;padding:4px;display:none;flex-direction:column;gap:3px;background:rgba(10,10,24,0.92);backdrop-filter:blur(16px) saturate(1.6);-webkit-backdrop-filter:blur(16px) saturate(1.6);border:1px solid rgba(255,255,255,0.08);border-radius:var(--bom-control-radius);box-shadow:0 10px 24px rgba(0,0,0,0.32)}
+.bom-layer-panel.is-open{display:flex}
+.bom-layer-option{appearance:none;-webkit-appearance:none;width:100%;padding:8px 10px;border:none;border-radius:calc(var(--bom-control-radius) - 2px);background:transparent;color:rgba(255,255,255,0.72);cursor:pointer;text-align:left;transition:background 0.15s,color 0.15s}
+.bom-layer-option:hover,.bom-layer-option.is-active{background:rgba(255,255,255,0.1);color:white}
+.bom-layer-option-name{display:block;font-size:12px;font-weight:600;line-height:1.2}
+.bom-layer-option-unit{display:block;margin-top:2px;font-size:10px;letter-spacing:0.04em;text-transform:uppercase;opacity:0.64}
+.leaflet-touch .bom-layer-button{width:36px;height:36px}
+.leaflet-touch .bom-layer-panel{right:44px}
 `;
 
 const CARD_CSS = `
@@ -610,6 +623,7 @@ class BomRadarCard extends HTMLElement {
     this._initialized = false;
     this._updateTimer = null;
     this._resizeObserver = null;
+    this._layerSwitcher = null;
   }
 
   connectedCallback() {
@@ -651,11 +665,12 @@ class BomRadarCard extends HTMLElement {
       show_marker: config.show_marker !== false,
       show_zoom: config.show_zoom !== false,
       show_recenter: config.show_recenter !== false,
+      show_layer_switcher: config.show_layer_switcher !== false,
       show_playback: config.show_playback !== false,
       show_legend: config.show_legend !== false,
       square_style: config.square_style === true,
       show_attribution: config.show_attribution !== false,
-      show_layer_label: config.show_layer_label === true,
+      show_layer_label: config.show_layer_label !== false,
       map_height: config.map_height || 300,
       dark_basemap: config.dark_basemap !== false,
       marker_latitude: config.marker_latitude,
@@ -696,15 +711,10 @@ class BomRadarCard extends HTMLElement {
     if (this._initialized) return;
     this._initialized = true;
 
-    const layerConfig = BOM_LAYERS[this._config.layer] || BOM_LAYERS.rain_rate;
-    const legendConfig = this._config.show_legend ? getLegendConfig(this._config.layer) : null;
-
     this.shadowRoot.innerHTML = `
       <style>${LEAFLET_CSS}${CARD_CSS}</style>
       <ha-card style="--bom-card-radius:${this._config.square_style ? '0px' : 'var(--ha-card-border-radius, 12px)'}">
-        <div class="card-content${legendConfig ? ' has-top-legend' : ''}${this._config.square_style ? ' is-square' : ''}">
-          ${this._config.show_layer_label ? `<div class="layer-badge">${layerConfig.name}</div>` : ''}
-          ${legendConfig ? renderLegendHtml(this._config.layer) : ''}
+        <div class="card-content${this._config.square_style ? ' is-square' : ''}">
           <div id="map" style="height: ${this._config.map_height}px"></div>
           <div class="loading-overlay" id="loading">
             <div class="spinner"></div>
@@ -721,6 +731,7 @@ class BomRadarCard extends HTMLElement {
     `;
 
     try {
+      this._renderTopOverlays();
       this._L = await loadLeaflet();
       await this._initMap(this._L);
       // Fade out loading overlay
@@ -762,6 +773,9 @@ class BomRadarCard extends HTMLElement {
     }
     if (this._config.show_recenter) {
       this._addRecenterControl(L);
+    }
+    if (this._config.show_layer_switcher) {
+      this._addLayerSwitcherControl(L);
     }
 
     const basemapUrl = this._config.dark_basemap
@@ -839,6 +853,114 @@ class BomRadarCard extends HTMLElement {
       return container;
     };
     control.addTo(this._map);
+  }
+
+  _addLayerSwitcherControl(L) {
+    const control = L.control({ position: 'topright' });
+    control.onAdd = () => {
+      const container = L.DomUtil.create('div', 'leaflet-control bom-layer-control');
+      const button = L.DomUtil.create('button', 'bom-layer-button', container);
+      const panel = L.DomUtil.create('div', 'bom-layer-panel', container);
+
+      button.type = 'button';
+      button.innerHTML = ICON_LAYERS;
+      button.title = 'Choose radar layer';
+      button.setAttribute('aria-label', 'Choose radar layer');
+      button.setAttribute('aria-haspopup', 'true');
+      button.setAttribute('aria-expanded', 'false');
+
+      Object.entries(BOM_LAYERS).forEach(([key, layer]) => {
+        const option = L.DomUtil.create('button', 'bom-layer-option', panel);
+        option.type = 'button';
+        option.dataset.layer = key;
+        option.innerHTML = `
+          <span class="bom-layer-option-name">${layer.name}</span>
+          <span class="bom-layer-option-unit">${layer.unit}</span>
+        `;
+        L.DomEvent.on(option, 'click', async (ev) => {
+          L.DomEvent.stop(ev);
+          await this._setLayer(key);
+        });
+      });
+
+      const togglePanel = (ev) => {
+        L.DomEvent.stop(ev);
+        const isOpen = !panel.classList.contains('is-open');
+        panel.classList.toggle('is-open', isOpen);
+        button.classList.toggle('is-open', isOpen);
+        button.setAttribute('aria-expanded', String(isOpen));
+      };
+
+      L.DomEvent.disableClickPropagation(container);
+      L.DomEvent.disableScrollPropagation(container);
+      L.DomEvent.on(button, 'click', togglePanel);
+
+      this._layerSwitcher = { button, panel };
+      this._syncLayerSwitcherState();
+      return container;
+    };
+    control.addTo(this._map);
+    this._map.on('click movestart zoomstart', () => this._closeLayerSwitcher());
+  }
+
+  _renderTopOverlays() {
+    const content = this.shadowRoot.querySelector('.card-content');
+    const map = this.shadowRoot.getElementById('map');
+    if (!content || !map) return;
+
+    content.querySelector('.layer-badge')?.remove();
+    content.querySelector('.legend-card')?.remove();
+
+    const layerConfig = BOM_LAYERS[this._config.layer] || BOM_LAYERS.rain_rate;
+    const legendConfig = this._config.show_legend ? getLegendConfig(this._config.layer) : null;
+
+    content.classList.toggle('has-top-legend', Boolean(legendConfig));
+
+    if (this._config.show_layer_label) {
+      map.insertAdjacentHTML('beforebegin', `<div class="layer-badge">${layerConfig.name}</div>`);
+    }
+    if (legendConfig) {
+      map.insertAdjacentHTML('beforebegin', renderLegendHtml(this._config.layer));
+    }
+  }
+
+  _closeLayerSwitcher() {
+    if (!this._layerSwitcher) return;
+    this._layerSwitcher.panel.classList.remove('is-open');
+    this._layerSwitcher.button.classList.remove('is-open');
+    this._layerSwitcher.button.setAttribute('aria-expanded', 'false');
+  }
+
+  _syncLayerSwitcherState() {
+    if (!this._layerSwitcher) return;
+    const layerConfig = BOM_LAYERS[this._config.layer] || BOM_LAYERS.rain_rate;
+    this._layerSwitcher.button.title = `Radar layer: ${layerConfig.name}`;
+    this._layerSwitcher.button.setAttribute('aria-label', `Radar layer: ${layerConfig.name}`);
+    this._layerSwitcher.panel.querySelectorAll('.bom-layer-option').forEach((option) => {
+      const isActive = option.dataset.layer === this._config.layer;
+      option.classList.toggle('is-active', isActive);
+      option.setAttribute('aria-pressed', String(isActive));
+    });
+  }
+
+  async _setLayer(layerKey) {
+    if (!BOM_LAYERS[layerKey] || layerKey === this._config.layer) {
+      this._closeLayerSwitcher();
+      return;
+    }
+
+    this._config.layer = layerKey;
+    this._renderTopOverlays();
+    this._syncLayerSwitcherState();
+    this._closeLayerSwitcher();
+
+    if (!this._L || !this._map) return;
+
+    try {
+      await this._refreshData();
+    } catch (err) {
+      console.warn(`BOM Radar Card: Failed to switch to layer "${layerKey}"`, err);
+    }
   }
 
   async _loadRadarData(L) {
@@ -1000,6 +1122,7 @@ class BomRadarCard extends HTMLElement {
 
   disconnectedCallback() {
     this._stopAnimation();
+    this._closeLayerSwitcher();
     if (this._updateTimer) {
       clearInterval(this._updateTimer);
       this._updateTimer = null;
@@ -1012,6 +1135,7 @@ class BomRadarCard extends HTMLElement {
       this._map.remove();
       this._map = null;
     }
+    this._layerSwitcher = null;
     this._initialized = false;
   }
 }
@@ -1122,10 +1246,11 @@ class BomRadarCardEditor extends HTMLElement {
           ${this._toggle('show_marker', 'Home marker', cfg.show_marker !== false)}
           ${this._toggle('show_zoom', 'Zoom controls', cfg.show_zoom !== false)}
           ${this._toggle('show_recenter', 'Recenter button', cfg.show_recenter !== false)}
+          ${this._toggle('show_layer_switcher', 'Layer switcher', cfg.show_layer_switcher !== false)}
           ${this._toggle('show_playback', 'Playback controls', cfg.show_playback !== false)}
           ${this._toggle('show_legend', 'Radar legend', cfg.show_legend !== false)}
           ${this._toggle('square_style', 'Square style', cfg.square_style === true)}
-          ${this._toggle('show_layer_label', 'Layer label', cfg.show_layer_label === true)}
+          ${this._toggle('show_layer_label', 'Layer label', cfg.show_layer_label !== false)}
           ${this._toggle('show_attribution', 'Attribution', cfg.show_attribution !== false)}
         </div>
 
@@ -1157,7 +1282,7 @@ class BomRadarCardEditor extends HTMLElement {
     });
 
     const toggles = [
-      'dark_basemap', 'show_marker', 'show_zoom', 'show_recenter', 'show_playback',
+      'dark_basemap', 'show_marker', 'show_zoom', 'show_recenter', 'show_layer_switcher', 'show_playback',
       'show_legend', 'square_style', 'show_layer_label', 'show_attribution',
     ];
     toggles.forEach(id => {
@@ -1205,7 +1330,7 @@ class BomRadarCardEditor extends HTMLElement {
     });
 
     const toggleFields = [
-      'dark_basemap', 'show_marker', 'show_zoom', 'show_recenter', 'show_playback',
+      'dark_basemap', 'show_marker', 'show_zoom', 'show_recenter', 'show_layer_switcher', 'show_playback',
       'show_legend', 'square_style', 'show_layer_label', 'show_attribution',
     ];
     toggleFields.forEach(id => {

@@ -8,7 +8,7 @@ This is the **first and only** HA card that uses BOM's new WMTS API (launched wi
 [![GitHub Release](https://img.shields.io/github/v/release/AshtonAU/bom-radar-card)](https://github.com/AshtonAU/bom-radar-card/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-Current release: **v1.3.0**
+Current release: **v1.4.0**
 
 > [!IMPORTANT]
 > If you previously installed another BOM radar card, remove its HACS entry and dashboard resource before adding this one. Home Assistant can keep multiple similarly named Lovelace resources loaded at the same time, which can cause broken or unpredictable behaviour. After switching cards, do a hard refresh / clear browser cache so the new resource is actually loaded.
@@ -25,7 +25,9 @@ Current release: **v1.3.0**
 - **Interactive map** — Zoom, pan, powered by Leaflet.js
 - **Animated timeline** — Up to 9 frames (45 minutes) of radar history with play/pause and scrubbing
 - **Multiple radar layers** — Rain rate, reflectivity, 1hr/24hr accumulation
+- **Optional in-card layer switcher** — Let users change radar layers directly from the map
 - **Radar legend** — BOM-style colour legend for rain rate and reflectivity layers
+- **Toggleable chrome** — Show or hide the playback bar, legend, zoom, recenter button, layer switcher, badge, marker, and attribution
 - **Dark theme** — CartoDB Dark Matter basemap with labels rendered above radar for readability
 - **Pulsing home marker** — Shows your location on the map
 - **GUI editor** — Full visual configuration with toggle switches
@@ -55,7 +57,7 @@ The card reads BOM's published WMTS time dimension and loads 256x256 PNG radar t
 
 ### Manual
 
-1. Download `bom-radar-card.js` from the [latest release](https://github.com/AshtonAU/bom-radar-card/releases) (`v1.3.0` at the time of writing)
+1. Download `bom-radar-card.js` from the [latest release](https://github.com/AshtonAU/bom-radar-card/releases) (`v1.4.0` at the time of writing)
 2. Copy to `/config/www/bom-radar-card/bom-radar-card.js`
 3. Add resource: **Settings → Dashboards → Resources → Add** `/local/bom-radar-card/bom-radar-card.js` (JavaScript Module)
 
@@ -87,10 +89,11 @@ That's it — it will use your Home Assistant location as the default center.
 | `marker_longitude` | number | center | Marker longitude |
 | `show_zoom` | boolean | `true` | Show zoom controls |
 | `show_recenter` | boolean | `true` | Show recenter button for home location |
+| `show_layer_switcher` | boolean | `true` | Show in-card layer switcher button |
 | `show_playback` | boolean | `true` | Show timeline controls |
 | `show_legend` | boolean | `true` | Show BOM-style legend for rain rate and reflectivity layers |
 | `square_style` | boolean | `false` | Use square corners for the card chrome and controls |
-| `show_layer_label` | boolean | `false` | Show layer name badge |
+| `show_layer_label` | boolean | `true` | Show layer name badge |
 | `show_attribution` | boolean | `true` | Show map attribution |
 | `dark_basemap` | boolean | `true` | Use dark map theme |
 
@@ -107,6 +110,7 @@ frame_delay: 400
 radar_opacity: 0.7
 dark_basemap: true
 show_marker: true
+show_layer_switcher: true
 square_style: false
 ```
 
@@ -115,11 +119,11 @@ square_style: false
 | Layer ID | Description | Update Frequency |
 |----------|-------------|-----------------|
 | `rain_rate` | Rain rate in mm/h (default) | Every 5 minutes |
-| `reflectivity` | Raw radar reflectivity in dBZ | Every 5 minutes |
 | `accumulation_1hr` | Estimated 1-hour rainfall accumulation | Every 5 minutes |
 | `accumulation_24hr` | 24-hour rainfall accumulation | Daily |
+| `reflectivity` | Raw radar reflectivity in dBZ | Every 5 minutes |
 
-`show_legend` currently applies to the rain rate and reflectivity layers, where BOM exposes a qualitative rain-intensity legend. Accumulation layers continue to render without a legend for now.
+`show_legend` currently applies to the rain rate and reflectivity layers, where BOM exposes a qualitative rain-intensity legend. Accumulation layers continue to render without a legend for now. All of the map chrome is optional, so you can build a very minimal card by turning off the controls you do not want, including the layer switcher, layer badge, zoom controls, recenter button, playback bar, and attribution.
 
 ## Why Not RainViewer?
 
