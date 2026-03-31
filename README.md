@@ -1,8 +1,8 @@
 # BOM Radar Card
 
-A Home Assistant custom card that displays **native Australian Bureau of Meteorology rain radar** — the same data that powers [bom.gov.au](https://www.bom.gov.au).
+Home Assistant custom card for **native Australian Bureau of Meteorology rain radar**, built on BOM's current WMTS platform and using the same radar source that powers [bom.gov.au](https://www.bom.gov.au).
 
-This is the **first and only** HA card that uses BOM's new WMTS API (launched with the redesigned bom.gov.au in 2025). All previous BOM radar cards relied on the old `api.weather.bom.gov.au` API which has been discontinued.
+This card exists as a modern replacement for older Home Assistant BOM radar cards that depended on the discontinued `api.weather.bom.gov.au` stack.
 
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://github.com/hacs/integration)
 [![GitHub Release](https://img.shields.io/github/v/release/AshtonAU/bom-radar-card)](https://github.com/AshtonAU/bom-radar-card/releases)
@@ -24,31 +24,25 @@ Current release: **v1.4.0**
 
 If the card saves you time and you want to support ongoing maintenance, you can use [GitHub Sponsors](https://github.com/sponsors/AshtonAU) or [Buy Me a Coffee](https://buymeacoffee.com/ashtonau).
 
-## Features
+## Highlights
 
-- **Native BOM data** — Direct from `api.bom.gov.au` WMTS tiles, not RainViewer or any third-party reprocessing
-- **1km resolution** radar imagery at max zoom
-- **Interactive map** — Zoom, pan, powered by Leaflet.js
-- **Animated timeline** — Up to 9 frames (45 minutes) of radar history with play/pause and scrubbing
-- **Multiple radar layers** — Rain rate, reflectivity, 1hr/24hr accumulation
-- **Optional in-card layer switcher** — Let users change radar layers directly from the map
-- **Radar legend** — BOM-style colour legend for rain rate and reflectivity layers
-- **Toggleable chrome** — Show or hide the playback bar, legend, zoom, recenter button, layer switcher, badge, marker, and attribution
-- **Dark theme** — CartoDB Dark Matter basemap with labels rendered above radar for readability
-- **Pulsing home marker** — Shows your location on the map
-- **GUI editor** — Full visual configuration with toggle switches
-- **Auto-refresh** — Updates every 5 minutes matching BOM's update cycle
-- **No API key required** — Uses BOM's publicly accessible WMTS endpoint
-- **Configurable opacity** — Adjust radar overlay transparency
+- **Native BOM radar tiles** from `api.bom.gov.au`, with no API key required
+- **Interactive map and animation** with zoom, pan, play/pause, scrubbing, and automatic refresh
+- **Multiple BOM layers** including rain rate, reflectivity, estimated 1-hour rain, and 24-hour accumulation
+- **In-card layer switcher** so people can move between available layers without reconfiguring the card
+- **Built-in radar legend** for rain rate and reflectivity layers
+- **Configurable presentation** with toggles for playback, legend, zoom, recenter, layer switcher, marker, attribution, and more
+- **Readable basemap** using split base tiles and labels so place names remain visible through radar overlays
+- **Visual editor support** for normal day-to-day configuration in Home Assistant
 
 ## How It Works
 
-The card reads BOM's published WMTS time dimension and loads 256x256 PNG radar tiles as overlays on an interactive dark map. The basemap is split into layers — base tiles below radar, labels above — so place names are always readable through the radar overlay.
+The card reads BOM's published WMTS time dimension and loads 256x256 PNG radar tiles as map overlays. The basemap is split into two layers: base tiles underneath the radar and labels above it, so suburb and city names stay readable.
 
 **Data flow:**
 1. Read the latest published timestamps from BOM's WMTS capabilities
 2. Load PNG radar tiles for each timestamp at the current map view
-3. Animate through frames with frosted-glass timeline controls
+3. Animate through frames using the built-in playback controls
 4. Auto-refresh every 5 minutes
 
 ## Installation
@@ -56,10 +50,10 @@ The card reads BOM's published WMTS time dimension and loads 256x256 PNG radar t
 ### HACS (Recommended)
 
 1. Open HACS in Home Assistant
-2. Click the three dots menu → **Custom repositories**
+2. Open the three dots menu and choose **Custom repositories**
 3. Add `https://github.com/AshtonAU/bom-radar-card` with category **Dashboard**
-4. Search for "BOM Radar Card" and install
-5. Clear browser cache / hard refresh
+4. Search for `BOM Radar Card` and install it
+5. Hard refresh your browser after installation
 
 ### Manual
 
@@ -129,16 +123,18 @@ square_style: false
 | `accumulation_24hr` | 24-hour rainfall accumulation | Daily |
 | `reflectivity` | Raw radar reflectivity in dBZ | Every 5 minutes |
 
-`show_legend` currently applies to the rain rate and reflectivity layers, where BOM exposes a qualitative rain-intensity legend. Accumulation layers continue to render without a legend for now. All of the map chrome is optional, so you can build a very minimal card by turning off the controls you do not want, including the layer switcher, layer badge, zoom controls, recenter button, playback bar, and attribution.
+`show_legend` currently applies to the rain rate and reflectivity layers, where BOM exposes a qualitative rain-intensity legend. Accumulation layers still render without a legend for now.
+
+All of the card chrome is optional, so you can keep the full interactive layout or strip it back to a much cleaner map by disabling things like the layer switcher, layer badge, zoom controls, recenter button, playback bar, and attribution.
 
 ## Why Not RainViewer?
 
-The popular `weather-radar-card` uses RainViewer, which reprocesses BOM data with lower fidelity and additional latency. This card fetches **directly from BOM's own tile server** — the same source that powers bom.gov.au — giving you:
+The popular `weather-radar-card` uses RainViewer, which reprocesses BOM data and adds another layer between Home Assistant and the original radar source. This card pulls **directly from BOM's own tile service** instead, which means:
 
-- **Higher resolution** (1km native vs RainViewer's interpolated data)
-- **Lower latency** (direct from BOM, no third-party processing delay)
-- **More data layers** (reflectivity, accumulation — not just rain rate)
-- **Australian-optimized** (correct map bounds, coverage, and tile grid)
+- **Higher fidelity radar imagery**
+- **Less delay between BOM updates and what you see**
+- **More BOM-native layers**, including reflectivity and accumulation
+- **Australian-specific bounds and tile handling** instead of a generic global weather view
 
 ## Technical Details
 
