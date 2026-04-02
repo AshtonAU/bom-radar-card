@@ -6,7 +6,7 @@
  * License: MIT
  */
 
-const CARD_VERSION = '1.4.0';
+const CARD_VERSION = '1.4.1';
 
 console.info(
   `%c BOM-RADAR-CARD %c v${CARD_VERSION} `,
@@ -29,21 +29,14 @@ const BOM_LAYERS = {
   },
   'accumulation_1hr': {
     id: 'atm_surf_air_precip_accumulation_1hr_total_mm',
-    name: 'Rain 1hr',
-    unit: 'mm',
-    tileMatrixSet: 'GoogleMapsCompatible_BoM',
-    legendType: 'numerical',
-  },
-  'accumulation_24hr': {
-    id: 'atm_surf_air_precip_accumulation_24hr_total_mm',
-    name: 'Rain 24hr',
+    name: 'Estimated Rain 1hr',
     unit: 'mm',
     tileMatrixSet: 'GoogleMapsCompatible_BoM',
     legendType: 'numerical',
   },
   'reflectivity': {
     id: 'atm_surf_air_precip_reflectivity_dbz',
-    name: 'Reflectivity',
+    name: 'Rain Reflectivity',
     unit: 'dBZ',
     tileMatrixSet: 'GoogleMapsCompatible_BoM',
     legendType: 'rainRadar',
@@ -666,7 +659,7 @@ class BomRadarCard extends HTMLElement {
       frame_count: Math.min(9, Math.max(1, config.frame_count || 9)),
       frame_delay: config.frame_delay || 500,
       restart_delay: config.restart_delay || 1500,
-      layer: config.layer || 'rain_rate',
+      layer: config.layer || 'reflectivity',
       show_marker: config.show_marker !== false,
       show_zoom: config.show_zoom !== false,
       show_recenter: config.show_recenter !== false,
@@ -706,7 +699,7 @@ class BomRadarCard extends HTMLElement {
 
   static getStubConfig() {
     return {
-      layer: 'rain_rate',
+      layer: 'reflectivity',
       zoom_level: 6,
       map_height: 300,
     };
@@ -771,6 +764,9 @@ class BomRadarCard extends HTMLElement {
       minZoom: MIN_MAP_ZOOM,
       maxZoom: MAX_DISPLAY_ZOOM,
     });
+    if (this._config.show_attribution && this._map.attributionControl) {
+      this._map.attributionControl.setPrefix(false);
+    }
     this._lastRadarDisplayZoom = this._map.getZoom();
 
     // Add zoom control to top-right
@@ -938,7 +934,7 @@ class BomRadarCard extends HTMLElement {
     content.querySelector('.layer-badge')?.remove();
     content.querySelector('.legend-card')?.remove();
 
-    const layerConfig = BOM_LAYERS[this._config.layer] || BOM_LAYERS.rain_rate;
+    const layerConfig = BOM_LAYERS[this._config.layer] || BOM_LAYERS.reflectivity;
     const legendConfig = this._config.show_legend ? getLegendConfig(this._config.layer) : null;
 
     content.classList.toggle('has-top-legend', Boolean(legendConfig));
@@ -960,7 +956,7 @@ class BomRadarCard extends HTMLElement {
 
   _syncLayerSwitcherState() {
     if (!this._layerSwitcher) return;
-    const layerConfig = BOM_LAYERS[this._config.layer] || BOM_LAYERS.rain_rate;
+    const layerConfig = BOM_LAYERS[this._config.layer] || BOM_LAYERS.reflectivity;
     this._layerSwitcher.button.title = `Radar layer: ${layerConfig.name}`;
     this._layerSwitcher.button.setAttribute('aria-label', `Radar layer: ${layerConfig.name}`);
     this._layerSwitcher.panel.querySelectorAll('.bom-layer-option').forEach((option) => {
@@ -991,7 +987,7 @@ class BomRadarCard extends HTMLElement {
   }
 
   async _loadRadarData(L) {
-    const layerConfig = BOM_LAYERS[this._config.layer] || BOM_LAYERS.rain_rate;
+    const layerConfig = BOM_LAYERS[this._config.layer] || BOM_LAYERS.reflectivity;
     const timestamps = await getLayerTimestamps(layerConfig, this._config.frame_count);
 
     if (!timestamps.length) return;
@@ -1036,7 +1032,7 @@ class BomRadarCard extends HTMLElement {
 
   async _rebuildRadarLayers() {
     if (!this._L || !this._map || !this._timestamps.length) return;
-    const layerConfig = BOM_LAYERS[this._config.layer] || BOM_LAYERS.rain_rate;
+    const layerConfig = BOM_LAYERS[this._config.layer] || BOM_LAYERS.reflectivity;
     this._replaceRadarLayers(this._L, layerConfig);
   }
 

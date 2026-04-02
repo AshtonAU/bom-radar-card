@@ -10,7 +10,7 @@ This card exists as a modern replacement for older Home Assistant BOM radar card
 [![GitHub Sponsors](https://img.shields.io/badge/Sponsor-GitHub%20Sponsors-ea4aaa?logo=githubsponsors&logoColor=white)](https://github.com/sponsors/AshtonAU)
 [![Buy Me a Coffee](https://img.shields.io/badge/Support-Buy%20Me%20a%20Coffee-FFDD00?logo=buymeacoffee&logoColor=000000)](https://buymeacoffee.com/ashtonau)
 
-Current release: **v1.4.0**
+Current release: **v1.4.1**
 
 > [!IMPORTANT]
 > If you previously installed another BOM radar card, remove its HACS entry and dashboard resource before adding this one. Home Assistant can keep multiple similarly named Lovelace resources loaded at the same time, which can cause broken or unpredictable behaviour. After switching cards, do a hard refresh / clear browser cache so the new resource is actually loaded.
@@ -28,7 +28,7 @@ If the card saves you time and you want to support ongoing maintenance, you can 
 
 - **Native BOM radar tiles** from `api.bom.gov.au`, with no API key required
 - **Interactive map and animation** with zoom, pan, play/pause, scrubbing, and automatic refresh
-- **Multiple BOM layers** including rain rate, reflectivity, estimated 1-hour rain, and 24-hour accumulation
+- **Multiple BOM layers** including rain rate, rain reflectivity, and estimated 1-hour rain
 - **In-card layer switcher** so people can move between available layers without reconfiguring the card
 - **Built-in radar legend** for rain rate and reflectivity layers
 - **Configurable presentation** with toggles for playback, legend, zoom, recenter, layer switcher, marker, attribution, and more
@@ -57,7 +57,7 @@ The card reads BOM's published WMTS time dimension and loads 256x256 PNG radar t
 
 ### Manual
 
-1. Download `bom-radar-card.js` from the [latest release](https://github.com/AshtonAU/bom-radar-card/releases) (`v1.4.0` at the time of writing)
+1. Download `bom-radar-card.js` from the [latest release](https://github.com/AshtonAU/bom-radar-card/releases) (`v1.4.1` at the time of writing)
 2. Copy to `/config/www/bom-radar-card/bom-radar-card.js`
 3. Add resource: **Settings → Dashboards → Resources → Add** `/local/bom-radar-card/bom-radar-card.js` (JavaScript Module)
 
@@ -75,7 +75,7 @@ That's it — it will use your Home Assistant location as the default center.
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| `layer` | string | `rain_rate` | Radar layer (see table below) |
+| `layer` | string | `reflectivity` | Radar layer (see table below) |
 | `center_latitude` | number | HA config | Map center latitude |
 | `center_longitude` | number | HA config | Map center longitude |
 | `zoom_level` | number | `6` | Map zoom level (3–12). Levels 9–12 overzoom native radar for a closer city view |
@@ -104,7 +104,7 @@ type: custom:bom-radar-card
 center_latitude: -33.87
 center_longitude: 151.21
 zoom_level: 7
-layer: rain_rate
+layer: reflectivity
 map_height: 350
 frame_delay: 400
 radar_opacity: 0.7
@@ -118,10 +118,9 @@ square_style: false
 
 | Layer ID | Description | Update Frequency |
 |----------|-------------|-----------------|
-| `rain_rate` | Rain rate in mm/h (default) | Every 5 minutes |
+| `rain_rate` | Rain rate in mm/h | Every 5 minutes |
 | `accumulation_1hr` | Estimated 1-hour rainfall accumulation | Every 5 minutes |
-| `accumulation_24hr` | 24-hour rainfall accumulation | Daily |
-| `reflectivity` | Raw radar reflectivity in dBZ | Every 5 minutes |
+| `reflectivity` | Raw radar reflectivity in dBZ (default) | Every 5 minutes |
 
 `show_legend` currently applies to the rain rate and reflectivity layers, where BOM exposes a qualitative rain-intensity legend. Accumulation layers still render without a legend for now.
 
@@ -133,7 +132,7 @@ The popular `weather-radar-card` uses RainViewer, which reprocesses BOM data and
 
 - **Higher fidelity radar imagery**
 - **Less delay between BOM updates and what you see**
-- **More BOM-native layers**, including reflectivity and accumulation
+- **More BOM-native layers**, including reflectivity and estimated hourly rain
 - **Australian-specific bounds and tile handling** instead of a generic global weather view
 
 ## Technical Details
