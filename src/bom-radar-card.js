@@ -540,23 +540,23 @@ function bomTileUrl(layerId, tileMatrixSet, z, col, row, time) {
     `&TILEROW=${row}&TILECOL=${col}&time=${time}`;
 }
 
-function createBomTileLayer(L, layerId, tileMatrixSet, time) {
-  return L.TileLayer.extend({
+function getBomTileUrlForCoords(layerId, tileMatrixSet, coords, time) {
+  const offset = getTileOffset(coords.z);
+  if (!offset) return '';
+
+  const col = coords.x - offset.xOffset;
+  const row = coords.y - offset.yOffset;
+  if (col < 0 || col >= offset.width || row < 0 || row >= offset.height) {
+    return '';
+  }
+
+  return bomTileUrl(layerId, tileMatrixSet, coords.z, col, row, time);
+}
+
+function createBomTileLayer(L, layerId, tileMatrixSet, time, options = {}) {
+  const BomTileLayer = L.TileLayer.extend({
     getTileUrl: function(coords) {
-      const z = Math.min(coords.z, MAX_RADAR_NATIVE_ZOOM);
-      const zoomScale = Math.pow(2, coords.z - z);
-      const nativeCoords = zoomScale > 1
-        ? {
-            x: Math.floor(coords.x / zoomScale),
-            y: Math.floor(coords.y / zoomScale),
-          }
-        : coords;
-      const offset = getTileOffset(z);
-      if (!offset) return '';
-      const col = nativeCoords.x - offset.xOffset;
-      const row = nativeCoords.y - offset.yOffset;
-      if (col < 0 || col >= offset.width || row < 0 || row >= offset.height) return '';
-      return bomTileUrl(layerId, tileMatrixSet, z, col, row, time);
+      return getBomTileUrlForCoords(layerId, tileMatrixSet, coords, time);
     },
     createTile: function(coords, done) {
       const tile = document.createElement('img');
@@ -577,6 +577,8 @@ function createBomTileLayer(L, layerId, tileMatrixSet, time) {
       return tile;
     },
   });
+
+  return new BomTileLayer('', options);
 }
 
 function getLegendConfig(layerKey) {
@@ -624,6 +626,9 @@ class BomRadarCard extends HTMLElement {
     this._updateTimer = null;
     this._resizeObserver = null;
     this._layerSwitcher = null;
+    this._lastRadarDisplayZoom = null;
+    this._pendingZoomRebuild = false;
+    this._previousDisplayZoom = null;
   }
 
   connectedCallback() {
@@ -766,6 +771,7 @@ class BomRadarCard extends HTMLElement {
       minZoom: MIN_MAP_ZOOM,
       maxZoom: MAX_DISPLAY_ZOOM,
     });
+    this._lastRadarDisplayZoom = this._map.getZoom();
 
     // Add zoom control to top-right
     if (this._config.show_zoom) {
@@ -821,11 +827,32 @@ class BomRadarCard extends HTMLElement {
     this._updateTimer = setInterval(() => this._refreshData(), 300000);
 
     // Pause animation during map interaction
-    this._map.on('movestart zoomstart', () => {
+    this._map.on('movestart', () => {
       if (this._playing) this._stopAnimation();
     });
-    this._map.on('moveend zoomend', () => {
+    this._map.on('zoomstart', () => {
+      this._pendingZoomRebuild = true;
+      this._previousDisplayZoom = this._lastRadarDisplayZoom ?? this._map?.getZoom() ?? this._config.zoom_level;
+      if (this._playing) this._stopAnimation();
+    });
+    this._map.on('moveend', () => {
+      if (this._pendingZoomRebuild) return;
       if (this._playing) this._startAnimation();
+    });
+    this._map.on('zoomend', async () => {
+      const nextZoom = this._map?.getZoom();
+      const previousZoom = this._previousDisplayZoom ?? nextZoom;
+
+      try {
+        if (this._shouldRebuildRadarOnZoom(previousZoom, nextZoom)) {
+          await this._rebuildRadarLayers();
+        }
+      } finally {
+        this._lastRadarDisplayZoom = nextZoom;
+        this._previousDisplayZoom = null;
+        this._pendingZoomRebuild = false;
+        if (this._playing) this._startAnimation();
+      }
     });
 
     // Handle resize
@@ -970,6 +997,14 @@ class BomRadarCard extends HTMLElement {
     if (!timestamps.length) return;
 
     this._timestamps = timestamps;
+    this._currentFrame = this._timestamps.length - 1;
+    this._replaceRadarLayers(L, layerConfig);
+    this._updateTimeline();
+    this._updateTimeLabel();
+  }
+
+  _replaceRadarLayers(L, layerConfig) {
+    const activeFrame = Math.min(this._currentFrame, this._timestamps.length - 1);
 
     // Remove old layers
     this._radarLayers.forEach(layer => {
@@ -977,43 +1012,32 @@ class BomRadarCard extends HTMLElement {
     });
     this._radarLayers = [];
 
-    const BomTileLayer = createBomTileLayer(L, layerConfig.id, layerConfig.tileMatrixSet, '');
-
     for (let i = 0; i < this._timestamps.length; i++) {
       const time = this._timestamps[i];
-      const isLast = i === this._timestamps.length - 1;
-      const layer = new BomTileLayer('', {
-        opacity: isLast ? this._config.radar_opacity : 0,
+      const layer = createBomTileLayer(L, layerConfig.id, layerConfig.tileMatrixSet, time, {
+        opacity: i === activeFrame ? this._config.radar_opacity : 0,
         maxZoom: MAX_DISPLAY_ZOOM,
         maxNativeZoom: MAX_RADAR_NATIVE_ZOOM,
         minZoom: MIN_MAP_ZOOM,
       });
-
-      // Override with correct timestamp
-      layer.getTileUrl = function(coords) {
-        const z = Math.min(coords.z, MAX_RADAR_NATIVE_ZOOM);
-        const zoomScale = Math.pow(2, coords.z - z);
-        const nativeCoords = zoomScale > 1
-          ? {
-              x: Math.floor(coords.x / zoomScale),
-              y: Math.floor(coords.y / zoomScale),
-            }
-          : coords;
-        const offset = getTileOffset(z);
-        if (!offset) return '';
-        const col = nativeCoords.x - offset.xOffset;
-        const row = nativeCoords.y - offset.yOffset;
-        if (col < 0 || col >= offset.width || row < 0 || row >= offset.height) return '';
-        return bomTileUrl(layerConfig.id, layerConfig.tileMatrixSet, z, col, row, time);
-      };
-
       layer.addTo(this._map);
       this._radarLayers.push(layer);
     }
 
-    this._currentFrame = this._timestamps.length - 1;
-    this._updateTimeline();
-    this._updateTimeLabel();
+    this._currentFrame = activeFrame;
+  }
+
+  _shouldRebuildRadarOnZoom(previousZoom, nextZoom) {
+    const previous = Math.round(previousZoom ?? nextZoom ?? this._config.zoom_level);
+    const next = Math.round(nextZoom ?? previous);
+
+    return previous !== next && (previous > MAX_RADAR_NATIVE_ZOOM || next > MAX_RADAR_NATIVE_ZOOM);
+  }
+
+  async _rebuildRadarLayers() {
+    if (!this._L || !this._map || !this._timestamps.length) return;
+    const layerConfig = BOM_LAYERS[this._config.layer] || BOM_LAYERS.rain_rate;
+    this._replaceRadarLayers(this._L, layerConfig);
   }
 
   async _refreshData() {
