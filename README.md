@@ -33,12 +33,12 @@ If the card saves you time and you want to support ongoing maintenance, you can 
 - **In-card layer switcher** so people can move between available layers without reconfiguring the card
 - **Built-in radar legend** for rain rate and reflectivity layers
 - **Configurable presentation** with toggles for playback, legend, zoom, recenter, layer switcher, marker, attribution, and more
-- **Readable basemap options** with the current split-label CARTO style plus a more map-detail-forward CARTO mode
+- **Readable split-label basemap** so suburb and city names stay visible through the weather overlays
 - **Visual editor support** for normal day-to-day configuration in Home Assistant
 
 ## How It Works
 
-The card reads BOM's published WMTS time dimension and loads 256x256 PNG tiles as map overlays. In `classic` basemap mode, the map is split into base tiles underneath the weather overlay and labels above it so suburb and city names stay readable. In `detailed` mode, the card uses a richer CARTO basemap style underneath the BOM overlay for more visible roads and place context.
+The card reads BOM's published WMTS time dimension and loads 256x256 PNG tiles as map overlays. The basemap is split into base tiles underneath the weather overlay and labels above it so suburb and city names stay readable.
 
 **Data flow:**
 1. Read the latest published timestamps from BOM's WMTS capabilities
@@ -81,7 +81,6 @@ That's it — it will use your Home Assistant location as the default center.
 | `center_longitude` | number | HA config | Map center longitude |
 | `zoom_level` | number | `7` | Map zoom level (3–8). Capped to BOM's native WMTS zoom range for cleaner layer alignment |
 | `map_height` | number | `300` | Card height in pixels |
-| `basemap_style` | string | `classic` | Basemap style: `classic` for the current split-label CARTO map, or `detailed` for a richer CARTO map |
 | `radar_opacity` | number | `0.7` | Weather overlay opacity (0.1–1.0) |
 | `frame_count` | number | `9` | Number of animation frames (1–9) |
 | `frame_delay` | number | `500` | Animation speed in milliseconds |
@@ -107,7 +106,6 @@ center_latitude: -33.87
 center_longitude: 151.21
 zoom_level: 7
 layer: reflectivity
-basemap_style: detailed
 map_height: 350
 frame_delay: 400
 radar_opacity: 0.7
@@ -175,7 +173,7 @@ The popular `weather-radar-card` uses RainViewer, which reprocesses BOM data and
 - **Projection**: BOM's Australian-extent WMTS TileMatrixSets based on EPSG:3857
 - **Max zoom**: Level 8 display, matching BOM's native WMTS tile matrix range
 - **Map library**: Leaflet.js 1.9.4 (loaded from CDN)
-- **Basemap**: CARTO Dark Matter / Voyager in `classic` split-label mode or `detailed` full-map mode
+- **Basemap**: CARTO Dark Matter / Voyager split into base and labels layers
 - **Update cycle**: 5 minutes
 - **Bundle size**: ~25KB minified
 
