@@ -6,7 +6,7 @@
  * License: MIT
  */
 
-const CARD_VERSION = '1.4.1';
+const CARD_VERSION = '1.5.0';
 
 console.info(
   `%c BOM-RADAR-CARD %c v${CARD_VERSION} `,
@@ -454,10 +454,40 @@ const TILE_MATRIX_SETS = {
 
 const MIN_MAP_ZOOM = 3;
 const MAX_BOM_NATIVE_ZOOM = 8;
-const MAX_DISPLAY_ZOOM = 12;
+const MAX_DISPLAY_ZOOM = 8;
+const DEFAULT_BASEMAP_STYLE = 'classic';
 
-const WORLD_EXTENT = 40075016.68;
-const HALF_EXTENT = 20037508.34;
+const BASEMAP_STYLES = {
+  classic: {
+    label: 'Classic',
+    dark: {
+      baseUrl: 'https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png',
+      labelsUrl: 'https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}{r}.png',
+      background: '#0d1117',
+    },
+    light: {
+      baseUrl: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager_nolabels/{z}/{x}/{y}{r}.png',
+      labelsUrl: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager_only_labels/{z}/{x}/{y}{r}.png',
+      background: '#f2f3f0',
+    },
+  },
+  detailed: {
+    label: 'Detailed',
+    dark: {
+      baseUrl: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+      labelsUrl: null,
+      background: '#0d1117',
+    },
+    light: {
+      baseUrl: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
+      labelsUrl: null,
+      background: '#f2f3f0',
+    },
+  },
+};
+
+const HALF_EXTENT = 20037508.342789244;
+const WORLD_EXTENT = HALF_EXTENT * 2;
 
 // 1x1 transparent PNG for out-of-bounds tiles
 const TRANSPARENT_PIXEL = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
@@ -467,12 +497,21 @@ function getTileOffset(tileMatrixSet, z) {
   const info = TILE_MATRIX_SETS[tileMatrixSet]?.[z];
   if (!info) return null;
   const tileSpan = WORLD_EXTENT / Math.pow(2, z);
+  const xOffset = Math.round((info.tlx + HALF_EXTENT) / tileSpan);
+  const yOffset = Math.round((HALF_EXTENT - info.tly) / tileSpan);
   return {
-    xOffset: Math.round((info.tlx + HALF_EXTENT) / tileSpan),
-    yOffset: Math.round((HALF_EXTENT - info.tly) / tileSpan),
+    xOffset,
+    yOffset,
+    xShiftPx: (((info.tlx + HALF_EXTENT) / tileSpan) - xOffset) * 256,
+    yShiftPx: (((HALF_EXTENT - info.tly) / tileSpan) - yOffset) * 256,
     width: info.w,
     height: info.h,
   };
+}
+
+function getBasemapConfig(styleName, darkBasemap) {
+  const style = BASEMAP_STYLES[styleName] || BASEMAP_STYLES[DEFAULT_BASEMAP_STYLE];
+  return darkBasemap ? style.dark : style.light;
 }
 
 // SVG icons
@@ -561,6 +600,74 @@ ha-card {
   --bom-bar-radius: 0px;
   --bom-attribution-radius: 0px;
   --bom-track-radius: 0px;
+}
+.card-content.is-detailed-basemap.is-light-basemap .leaflet-control-zoom,
+.card-content.is-detailed-basemap.is-light-basemap .bom-recenter-control,
+.card-content.is-detailed-basemap.is-light-basemap .bom-layer-button,
+.card-content.is-detailed-basemap.is-light-basemap .bom-layer-panel,
+.card-content.is-detailed-basemap.is-light-basemap .controls,
+.card-content.is-detailed-basemap.is-light-basemap .layer-badge {
+  box-shadow: 0 6px 20px rgba(15, 23, 42, 0.16);
+}
+.card-content.is-detailed-basemap.is-light-basemap .leaflet-control-zoom a,
+.card-content.is-detailed-basemap.is-light-basemap .bom-recenter-button,
+.card-content.is-detailed-basemap.is-light-basemap .bom-layer-button,
+.card-content.is-detailed-basemap.is-light-basemap .controls,
+.card-content.is-detailed-basemap.is-light-basemap .layer-badge {
+  background: rgba(255, 255, 255, 0.88);
+  border-color: rgba(15, 23, 42, 0.08);
+  color: rgba(15, 23, 42, 0.72);
+}
+.card-content.is-detailed-basemap.is-light-basemap .leaflet-control-zoom a {
+  border-bottom-color: rgba(15, 23, 42, 0.08);
+}
+.card-content.is-detailed-basemap.is-light-basemap .leaflet-control-zoom a:hover,
+.card-content.is-detailed-basemap.is-light-basemap .bom-recenter-button:hover,
+.card-content.is-detailed-basemap.is-light-basemap .bom-layer-button:hover,
+.card-content.is-detailed-basemap.is-light-basemap .bom-layer-button.is-open {
+  background: rgba(255, 255, 255, 0.96);
+  color: rgba(15, 23, 42, 0.94);
+}
+.card-content.is-detailed-basemap.is-light-basemap .bom-layer-panel {
+  background: rgba(255, 255, 255, 0.94);
+  border-color: rgba(15, 23, 42, 0.08);
+}
+.card-content.is-detailed-basemap.is-light-basemap .bom-layer-group,
+.card-content.is-detailed-basemap.is-light-basemap .layer-badge,
+.card-content.is-detailed-basemap.is-light-basemap .time-label {
+  color: rgba(15, 23, 42, 0.58);
+}
+.card-content.is-detailed-basemap.is-light-basemap .bom-layer-option {
+  color: rgba(15, 23, 42, 0.78);
+}
+.card-content.is-detailed-basemap.is-light-basemap .bom-layer-option:hover,
+.card-content.is-detailed-basemap.is-light-basemap .bom-layer-option.is-active,
+.card-content.is-detailed-basemap.is-light-basemap .play-btn:hover {
+  background: rgba(15, 23, 42, 0.06);
+  color: rgba(15, 23, 42, 0.96);
+}
+.card-content.is-detailed-basemap.is-light-basemap .play-btn {
+  color: rgba(15, 23, 42, 0.8);
+}
+.card-content.is-detailed-basemap.is-light-basemap .frame-dot {
+  background: rgba(15, 23, 42, 0.12);
+}
+.card-content.is-detailed-basemap.is-light-basemap .frame-dot:hover {
+  background: rgba(15, 23, 42, 0.28);
+}
+.card-content.is-detailed-basemap.is-light-basemap .frame-dot.active {
+  background: #2563eb;
+  box-shadow: 0 0 8px rgba(37, 99, 235, 0.35);
+}
+.card-content.is-detailed-basemap.is-light-basemap .frame-dot.past {
+  background: rgba(37, 99, 235, 0.22);
+}
+.card-content.is-detailed-basemap.is-light-basemap .leaflet-control-attribution {
+  background: rgba(255, 255, 255, 0.84) !important;
+  color: rgba(15, 23, 42, 0.54);
+}
+.card-content.is-detailed-basemap.is-light-basemap .leaflet-control-attribution a {
+  color: rgba(29, 78, 216, 0.72);
 }
 .card-content.has-top-legend .layer-badge {
   top: 18px;
@@ -943,11 +1050,32 @@ function selectLayerTimestamps(layerConfig, publishedTimes, count) {
   return publishedTimes.slice(-count);
 }
 
+function hasFreshPublishedTimestamps(layerConfig, publishedTimes) {
+  if (!publishedTimes.length) {
+    return false;
+  }
+
+  const timeMode = layerConfig?.timeMode || 'past';
+  const stepMinutes = layerConfig?.fallbackStepMinutes || 5;
+
+  if (timeMode !== 'past' || stepMinutes >= 1440) {
+    return true;
+  }
+
+  const latestTimeMs = new Date(publishedTimes[publishedTimes.length - 1]).getTime();
+  if (!Number.isFinite(latestTimeMs)) {
+    return false;
+  }
+
+  const maxAgeMs = Math.max(45, stepMinutes * 3) * 60 * 1000;
+  return latestTimeMs >= Date.now() - maxAgeMs;
+}
+
 async function getLayerTimestamps(layerConfig, count = 9) {
   try {
     const capabilities = await loadBomCapabilities();
     const publishedTimes = extractLayerTimestamps(capabilities, layerConfig.id);
-    if (publishedTimes.length > 0) {
+    if (hasFreshPublishedTimestamps(layerConfig, publishedTimes)) {
       return selectLayerTimestamps(layerConfig, publishedTimes, count);
     }
   } catch (err) {
@@ -985,6 +1113,11 @@ function createBomTileLayer(L, layerId, tileMatrixSet, time, options = {}) {
     createTile: function(coords, done) {
       const tile = document.createElement('img');
       tile.alt = '';
+      const offset = getTileOffset(tileMatrixSet, coords.z);
+      if (offset) {
+        tile.style.marginLeft = `${offset.xShiftPx}px`;
+        tile.style.marginTop = `${offset.yShiftPx}px`;
+      }
       const url = this.getTileUrl(coords);
       if (!url) {
         tile.src = TRANSPARENT_PIXEL;
@@ -1119,7 +1252,7 @@ class BomRadarCard extends HTMLElement {
     this._config = {
       center_latitude: config.center_latitude,
       center_longitude: config.center_longitude,
-      zoom_level: Math.min(MAX_DISPLAY_ZOOM, Math.max(MIN_MAP_ZOOM, config.zoom_level || 6)),
+      zoom_level: Math.min(MAX_DISPLAY_ZOOM, Math.max(MIN_MAP_ZOOM, config.zoom_level || 7)),
       frame_count: Math.min(9, Math.max(1, config.frame_count || 9)),
       frame_delay: config.frame_delay || 500,
       restart_delay: config.restart_delay || 1500,
@@ -1135,6 +1268,7 @@ class BomRadarCard extends HTMLElement {
       show_layer_label: config.show_layer_label === true,
       map_height: config.map_height || 300,
       dark_basemap: config.dark_basemap !== false,
+      basemap_style: BASEMAP_STYLES[config.basemap_style] ? config.basemap_style : DEFAULT_BASEMAP_STYLE,
       marker_latitude: config.marker_latitude,
       marker_longitude: config.marker_longitude,
       radar_opacity: Math.min(1, Math.max(0.1, config.radar_opacity || 0.7)),
@@ -1164,8 +1298,9 @@ class BomRadarCard extends HTMLElement {
   static getStubConfig() {
     return {
       layer: 'reflectivity',
-      zoom_level: 6,
+      zoom_level: 7,
       map_height: 300,
+      basemap_style: 'detailed',
     };
   }
 
@@ -1176,7 +1311,7 @@ class BomRadarCard extends HTMLElement {
     this.shadowRoot.innerHTML = `
       <style>${LEAFLET_CSS}${CARD_CSS}</style>
       <ha-card style="--bom-card-radius:${this._config.square_style ? '0px' : 'var(--ha-card-border-radius, 12px)'}">
-        <div class="card-content${this._config.square_style ? ' is-square' : ''}">
+        <div class="card-content${this._config.square_style ? ' is-square' : ''}${this._config.basemap_style === 'detailed' ? ' is-detailed-basemap' : ''}${this._config.dark_basemap ? '' : ' is-light-basemap'}">
           <div id="map" style="height: ${this._config.map_height}px"></div>
           <div class="loading-overlay" id="loading">
             <div class="spinner"></div>
@@ -1218,6 +1353,9 @@ class BomRadarCard extends HTMLElement {
 
     const lat = this._config.center_latitude ?? this._hass?.config?.latitude ?? -33.87;
     const lon = this._config.center_longitude ?? this._hass?.config?.longitude ?? 151.21;
+    const basemapConfig = getBasemapConfig(this._config.basemap_style, this._config.dark_basemap);
+
+    container.style.background = basemapConfig.background;
 
     this._map = L.map(container, {
       center: [lat, lon],
@@ -1244,16 +1382,9 @@ class BomRadarCard extends HTMLElement {
       this._addLayerSwitcherControl(L);
     }
 
-    const basemapUrl = this._config.dark_basemap
-      ? 'https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png'
-      : 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager_nolabels/{z}/{x}/{y}{r}.png';
-
-    const labelsUrl = this._config.dark_basemap
-      ? 'https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}{r}.png'
-      : 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager_only_labels/{z}/{x}/{y}{r}.png';
-
     // Base tiles (below radar)
-    L.tileLayer(basemapUrl, {
+    L.tileLayer(basemapConfig.baseUrl, {
+      attribution: '&copy; <a href="https://carto.com">CARTO</a> | &copy; <a href="http://www.bom.gov.au">BOM</a>',
       subdomains: 'abcd',
       maxZoom: MAX_DISPLAY_ZOOM,
     }).addTo(this._map);
@@ -1262,12 +1393,13 @@ class BomRadarCard extends HTMLElement {
     await this._loadRadarData(L);
 
     // Labels on top of radar
-    L.tileLayer(labelsUrl, {
-      attribution: '&copy; <a href="https://carto.com">CARTO</a> | &copy; <a href="http://www.bom.gov.au">BOM</a>',
-      subdomains: 'abcd',
-      maxZoom: MAX_DISPLAY_ZOOM,
-      pane: 'overlayPane',
-    }).addTo(this._map);
+    if (basemapConfig.labelsUrl) {
+      L.tileLayer(basemapConfig.labelsUrl, {
+        subdomains: 'abcd',
+        maxZoom: MAX_DISPLAY_ZOOM,
+        pane: 'overlayPane',
+      }).addTo(this._map);
+    }
 
     // Home marker
     if (this._config.show_marker) {
@@ -1697,10 +1829,18 @@ class BomRadarCardEditor extends HTMLElement {
 
         <div class="section">
           <div class="section-title">Map</div>
+          <div class="row">
+            <label>Basemap Style</label>
+            <select id="basemap_style">
+              ${Object.entries(BASEMAP_STYLES).map(([key, style]) =>
+                `<option value="${key}" ${(cfg.basemap_style || DEFAULT_BASEMAP_STYLE) === key ? 'selected' : ''}>${style.label}</option>`
+              ).join('')}
+            </select>
+          </div>
           <div class="row-inline">
             <div class="row">
-              <label>Zoom (3-12)</label>
-              <input type="number" id="zoom_level" min="3" max="12" value="${cfg.zoom_level || 6}">
+              <label>Zoom (3-8)</label>
+              <input type="number" id="zoom_level" min="3" max="8" value="${cfg.zoom_level || 7}">
             </div>
             <div class="row">
               <label>Height (px)</label>
@@ -1765,7 +1905,7 @@ class BomRadarCardEditor extends HTMLElement {
 
     // Bind events
     const fields = [
-      'layer', 'zoom_level', 'map_height', 'center_latitude', 'center_longitude',
+      'layer', 'basemap_style', 'zoom_level', 'map_height', 'center_latitude', 'center_longitude',
       'frame_delay', 'restart_delay', 'radar_opacity', 'frame_count',
       'marker_latitude', 'marker_longitude',
     ];
@@ -1803,6 +1943,9 @@ class BomRadarCardEditor extends HTMLElement {
 
     const layer = get('layer');
     if (layer) config.layer = layer.value;
+
+    const basemapStyle = get('basemap_style');
+    if (basemapStyle) config.basemap_style = basemapStyle.value;
 
     const numFields = {
       zoom_level: 'int', map_height: 'int', frame_delay: 'int',

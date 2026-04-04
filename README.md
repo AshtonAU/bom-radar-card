@@ -5,12 +5,13 @@ Home Assistant custom card for **native Australian Bureau of Meteorology radar a
 This card exists as a modern replacement for older Home Assistant BOM radar cards that depended on the discontinued `api.weather.bom.gov.au` stack.
 
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://github.com/hacs/integration)
+[![Open your Home Assistant instance and open this repository in HACS.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=AshtonAU&repository=bom-radar-card&category=plugin)
 [![GitHub Release](https://img.shields.io/github/v/release/AshtonAU/bom-radar-card)](https://github.com/AshtonAU/bom-radar-card/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![GitHub Sponsors](https://img.shields.io/badge/Sponsor-GitHub%20Sponsors-ea4aaa?logo=githubsponsors&logoColor=white)](https://github.com/sponsors/AshtonAU)
 [![Buy Me a Coffee](https://img.shields.io/badge/Support-Buy%20Me%20a%20Coffee-FFDD00?logo=buymeacoffee&logoColor=000000)](https://buymeacoffee.com/ashtonau)
 
-Current release: **v1.4.1**
+Current release: **v1.5.0**
 
 > [!IMPORTANT]
 > If you previously installed another BOM radar card, remove its HACS entry and dashboard resource before adding this one. Home Assistant can keep multiple similarly named Lovelace resources loaded at the same time, which can cause broken or unpredictable behaviour. After switching cards, do a hard refresh / clear browser cache so the new resource is actually loaded.
@@ -32,12 +33,12 @@ If the card saves you time and you want to support ongoing maintenance, you can 
 - **In-card layer switcher** so people can move between available layers without reconfiguring the card
 - **Built-in radar legend** for rain rate and reflectivity layers
 - **Configurable presentation** with toggles for playback, legend, zoom, recenter, layer switcher, marker, attribution, and more
-- **Readable basemap** using split base tiles and labels so place names remain visible through radar overlays
+- **Readable basemap options** with the current split-label CARTO style plus a more map-detail-forward CARTO mode
 - **Visual editor support** for normal day-to-day configuration in Home Assistant
 
 ## How It Works
 
-The card reads BOM's published WMTS time dimension and loads 256x256 PNG tiles as map overlays. The basemap is split into two layers: base tiles underneath the weather overlay and labels above it, so suburb and city names stay readable.
+The card reads BOM's published WMTS time dimension and loads 256x256 PNG tiles as map overlays. In `classic` basemap mode, the map is split into base tiles underneath the weather overlay and labels above it so suburb and city names stay readable. In `detailed` mode, the card uses a richer CARTO basemap style underneath the BOM overlay for more visible roads and place context.
 
 **Data flow:**
 1. Read the latest published timestamps from BOM's WMTS capabilities
@@ -57,7 +58,7 @@ The card reads BOM's published WMTS time dimension and loads 256x256 PNG tiles a
 
 ### Manual
 
-1. Download `bom-radar-card.js` from the [latest release](https://github.com/AshtonAU/bom-radar-card/releases) (`v1.4.1` at the time of writing)
+1. Download `bom-radar-card.js` from the [latest release](https://github.com/AshtonAU/bom-radar-card/releases) (`v1.5.0` at the time of writing)
 2. Copy to `/config/www/bom-radar-card/bom-radar-card.js`
 3. Add resource: **Settings → Dashboards → Resources → Add** `/local/bom-radar-card/bom-radar-card.js` (JavaScript Module)
 
@@ -78,8 +79,9 @@ That's it — it will use your Home Assistant location as the default center.
 | `layer` | string | `reflectivity` | BOM layer (see table below) |
 | `center_latitude` | number | HA config | Map center latitude |
 | `center_longitude` | number | HA config | Map center longitude |
-| `zoom_level` | number | `6` | Map zoom level (3–12). Levels 9–12 overzoom native radar for a closer city view |
+| `zoom_level` | number | `7` | Map zoom level (3–8). Capped to BOM's native WMTS zoom range for cleaner layer alignment |
 | `map_height` | number | `300` | Card height in pixels |
+| `basemap_style` | string | `classic` | Basemap style: `classic` for the current split-label CARTO map, or `detailed` for a richer CARTO map |
 | `radar_opacity` | number | `0.7` | Weather overlay opacity (0.1–1.0) |
 | `frame_count` | number | `9` | Number of animation frames (1–9) |
 | `frame_delay` | number | `500` | Animation speed in milliseconds |
@@ -105,6 +107,7 @@ center_latitude: -33.87
 center_longitude: 151.21
 zoom_level: 7
 layer: reflectivity
+basemap_style: detailed
 map_height: 350
 frame_delay: 400
 radar_opacity: 0.7
@@ -170,9 +173,9 @@ The popular `weather-radar-card` uses RainViewer, which reprocesses BOM data and
 - **Data source**: BOM WMTS at `api.bom.gov.au`
 - **Tile format**: 256×256 PNG with transparency
 - **Projection**: BOM's Australian-extent WMTS TileMatrixSets based on EPSG:3857
-- **Max zoom**: Level 12 display, with native BOM tiles through level 8 and overzoom above that
+- **Max zoom**: Level 8 display, matching BOM's native WMTS tile matrix range
 - **Map library**: Leaflet.js 1.9.4 (loaded from CDN)
-- **Basemap**: CartoDB Dark Matter / Voyager (split labels-over-radar)
+- **Basemap**: CARTO Dark Matter / Voyager in `classic` split-label mode or `detailed` full-map mode
 - **Update cycle**: 5 minutes
 - **Bundle size**: ~25KB minified
 
