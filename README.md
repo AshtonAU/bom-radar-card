@@ -81,10 +81,14 @@ That's it — it will use your Home Assistant location as the default center.
 | `center_longitude` | number | HA config | Map center longitude |
 | `zoom_level` | number | `7` | Map zoom level (3–8). Capped to BOM's native WMTS zoom range for cleaner layer alignment |
 | `map_height` | number | `300` | Card height in pixels |
+| `basemap_provider` | string | `carto` | Basemap provider: `carto`, `stadia`, or `esri` |
+| `basemap_style` | string | provider default | Basemap style for the selected provider |
+| `basemap_api_key` | string | none | Optional provider API key. Not used for CARTO |
 | `radar_opacity` | number | `0.7` | Weather overlay opacity (0.1–1.0) |
 | `frame_count` | number | `9` | Number of animation frames (1–9) |
 | `frame_delay` | number | `500` | Animation speed in milliseconds |
 | `restart_delay` | number | `1500` | Pause at end of loop in milliseconds |
+| `enabled_layers` | list | all layers | Restrict which BOM layers appear in the in-card layer switcher |
 | `show_marker` | boolean | `true` | Show home location marker |
 | `marker_latitude` | number | center | Marker latitude |
 | `marker_longitude` | number | center | Marker longitude |
@@ -96,7 +100,7 @@ That's it — it will use your Home Assistant location as the default center.
 | `square_style` | boolean | `false` | Use square corners for the card chrome and controls |
 | `show_layer_label` | boolean | `false` | Show layer name badge |
 | `show_attribution` | boolean | `true` | Show map attribution |
-| `dark_basemap` | boolean | `true` | Use dark map theme |
+| `dark_basemap` | boolean | `true` | Legacy fallback for dark/light defaults. Still supported |
 
 ### Example
 
@@ -107,12 +111,38 @@ center_longitude: 151.21
 zoom_level: 7
 layer: reflectivity
 map_height: 350
+basemap_provider: carto
+basemap_style: dark
 frame_delay: 400
 radar_opacity: 0.7
-dark_basemap: true
 show_marker: true
 show_layer_switcher: true
 square_style: false
+```
+
+### Basemap Providers
+
+- `carto`: default option, no API key required
+- `stadia`: optional styles including smoother road/terrain maps and satellite imagery
+- `esri`: optional imagery/topographic styles
+
+`basemap_api_key` is optional in the config, but Stadia Maps and Esri may require a valid key depending on the selected style and the environment the card is hosted from.
+
+Both Stadia Maps and Esri offer free-tier access, but the exact limits and which styles are included can vary by provider plan. CARTO remains the safest no-key default.
+
+### Limiting The Layer Switcher
+
+If you want the in-card layer switcher to show only a smaller curated set, use `enabled_layers`:
+
+```yaml
+type: custom:bom-radar-card
+layer: reflectivity
+enabled_layers:
+  - reflectivity
+  - rain_rate
+  - accumulation_1hr
+  - wind_speed_kmh
+  - air_temperature
 ```
 
 ## Available BOM Layers

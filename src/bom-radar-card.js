@@ -422,6 +422,8 @@ const BOM_LAYERS = {
   },
 };
 
+const DEFAULT_ENABLED_LAYERS = Object.keys(BOM_LAYERS);
+
 const RADAR_LEGEND = {
   gradient: 'linear-gradient(90deg, rgb(245, 245, 255) 0%, rgb(180, 180, 255) 7%, rgb(120, 120, 255) 14%, rgb(20, 20, 255) 21%, rgb(0, 216, 195) 28%, rgb(0, 150, 144) 35%, rgb(0, 102, 102) 42%, rgb(255, 255, 0) 49%, rgb(255, 200, 0) 56%, rgb(255, 150, 0) 63%, rgb(255, 100, 0) 70%, rgb(255, 0, 0) 77%, rgb(200, 0, 0) 84%, rgb(120, 0, 0) 91%, rgb(40, 0, 0) 100%)',
 };
@@ -459,6 +461,98 @@ const MAX_DISPLAY_ZOOM = 8;
 const HALF_EXTENT = 20037508.342789244;
 const WORLD_EXTENT = HALF_EXTENT * 2;
 
+const BASEMAP_PROVIDER_NAMES = {
+  carto: 'CARTO',
+  stadia: 'Stadia Maps',
+  esri: 'Esri',
+};
+
+const CARTO_ATTRIBUTION = '&copy; <a href="https://carto.com">CARTO</a> | &copy; <a href="http://www.bom.gov.au">BOM</a>';
+const STADIA_ATTRIBUTION = '&copy; <a href="https://www.stadiamaps.com">Stadia Maps</a> &copy; <a href="https://openmaptiles.org/">OpenMapTiles</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> | &copy; <a href="http://www.bom.gov.au">BOM</a>';
+const STADIA_STAMEN_ATTRIBUTION = '&copy; <a href="https://www.stadiamaps.com">Stadia Maps</a> &copy; <a href="https://stamen.com/">Stamen Design</a> &copy; <a href="https://openmaptiles.org/">OpenMapTiles</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> | &copy; <a href="http://www.bom.gov.au">BOM</a>';
+const STADIA_SATELLITE_ATTRIBUTION = '&copy; <a href="https://www.stadiamaps.com">Stadia Maps</a> &copy; CNES, Distribution Airbus DS, &copy; Airbus DS, &copy; PlanetObserver (Contains Copernicus Data), &copy; <a href="https://openmaptiles.org/">OpenMapTiles</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> | &copy; <a href="http://www.bom.gov.au">BOM</a>';
+const ESRI_IMAGERY_ATTRIBUTION = 'Tiles &copy; Esri, Maxar, Earthstar Geographics | Labels &copy; Esri | &copy; <a href="http://www.bom.gov.au">BOM</a>';
+const ESRI_TOPO_ATTRIBUTION = 'Tiles &copy; Esri, TomTom, Garmin, FAO, NOAA, USGS, OpenStreetMap contributors | &copy; <a href="http://www.bom.gov.au">BOM</a>';
+
+const BASEMAP_PROVIDER_STYLES = {
+  carto: {
+    dark: {
+      name: 'CARTO Dark Matter',
+      baseUrl: 'https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png',
+      labelsUrl: 'https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}{r}.png',
+      attribution: CARTO_ATTRIBUTION,
+      background: '#0d1117',
+    },
+    light: {
+      name: 'CARTO Voyager',
+      baseUrl: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager_nolabels/{z}/{x}/{y}{r}.png',
+      labelsUrl: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager_only_labels/{z}/{x}/{y}{r}.png',
+      attribution: CARTO_ATTRIBUTION,
+      background: '#f2f3f0',
+    },
+  },
+  stadia: {
+    alidade_dark: {
+      name: 'Alidade Smooth Dark',
+      baseUrl: 'https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}{r}.png',
+      labelsUrl: null,
+      attribution: STADIA_ATTRIBUTION,
+      background: '#0d1117',
+    },
+    alidade_light: {
+      name: 'Alidade Smooth',
+      baseUrl: 'https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}{r}.png',
+      labelsUrl: null,
+      attribution: STADIA_ATTRIBUTION,
+      background: '#f2f3f0',
+    },
+    outdoors: {
+      name: 'Outdoors',
+      baseUrl: 'https://tiles.stadiamaps.com/tiles/outdoors/{z}/{x}/{y}{r}.png',
+      labelsUrl: null,
+      attribution: STADIA_ATTRIBUTION,
+      background: '#f1f4ee',
+    },
+    osm_bright: {
+      name: 'OSM Bright',
+      baseUrl: 'https://tiles.stadiamaps.com/tiles/osm_bright/{z}/{x}/{y}{r}.png',
+      labelsUrl: null,
+      attribution: STADIA_ATTRIBUTION,
+      background: '#f6f8fb',
+    },
+    terrain: {
+      name: 'Stamen Terrain',
+      baseUrl: 'https://tiles.stadiamaps.com/tiles/stamen_terrain/{z}/{x}/{y}{r}.png',
+      labelsUrl: null,
+      attribution: STADIA_STAMEN_ATTRIBUTION,
+      background: '#f2efe9',
+    },
+    satellite: {
+      name: 'Alidade Satellite',
+      baseUrl: 'https://tiles.stadiamaps.com/tiles/alidade_satellite/{z}/{x}/{y}{r}.jpg',
+      labelsUrl: null,
+      attribution: STADIA_SATELLITE_ATTRIBUTION,
+      background: '#0d1117',
+    },
+  },
+  esri: {
+    imagery: {
+      name: 'World Imagery',
+      baseUrl: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+      labelsUrl: 'https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',
+      attribution: ESRI_IMAGERY_ATTRIBUTION,
+      background: '#0d1117',
+    },
+    topo: {
+      name: 'World Topo',
+      baseUrl: 'https://services.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}',
+      labelsUrl: null,
+      attribution: ESRI_TOPO_ATTRIBUTION,
+      background: '#f2f3f0',
+    },
+  },
+};
+
 // 1x1 transparent PNG for out-of-bounds tiles
 const TRANSPARENT_PIXEL = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
 
@@ -479,16 +573,88 @@ function getTileOffset(tileMatrixSet, z) {
   };
 }
 
-function getBasemapConfig(darkBasemap) {
-  return darkBasemap ? {
-    baseUrl: 'https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png',
-    labelsUrl: 'https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}{r}.png',
-    background: '#0d1117',
-  } : {
-    baseUrl: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager_nolabels/{z}/{x}/{y}{r}.png',
-    labelsUrl: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager_only_labels/{z}/{x}/{y}{r}.png',
-    background: '#f2f3f0',
-  };
+function getBasemapProvider(config) {
+  return BASEMAP_PROVIDER_STYLES[config?.basemap_provider] ? config.basemap_provider : 'carto';
+}
+
+function getDefaultBasemapStyle(provider, darkBasemap) {
+  if (provider === 'stadia') {
+    return darkBasemap ? 'alidade_dark' : 'alidade_light';
+  }
+
+  if (provider === 'esri') {
+    return darkBasemap ? 'imagery' : 'topo';
+  }
+
+  return darkBasemap ? 'dark' : 'light';
+}
+
+function isDarkBasemapStyle(provider, style) {
+  return (
+    (provider === 'carto' && style === 'dark') ||
+    (provider === 'stadia' && (style === 'alidade_dark' || style === 'satellite')) ||
+    (provider === 'esri' && style === 'imagery')
+  );
+}
+
+function getBasemapStyleOptions(provider) {
+  return Object.entries(BASEMAP_PROVIDER_STYLES[getBasemapProvider({ basemap_provider: provider })] || {})
+    .map(([value, styleConfig]) => ({
+      value,
+      label: styleConfig.name,
+    }));
+}
+
+function getBasemapConfig(config) {
+  const darkBasemap = config?.dark_basemap !== false;
+  const provider = getBasemapProvider(config);
+  const style = BASEMAP_PROVIDER_STYLES[provider]?.[config?.basemap_style]
+    ? config.basemap_style
+    : getDefaultBasemapStyle(provider, darkBasemap);
+  const styleConfig = BASEMAP_PROVIDER_STYLES[provider][style] || BASEMAP_PROVIDER_STYLES.carto.dark;
+  const apiKey = typeof config?.basemap_api_key === 'string' ? config.basemap_api_key.trim() : '';
+  const stadiaKeySuffix = apiKey ? `?api_key=${encodeURIComponent(apiKey)}` : '';
+  const esriTokenSuffix = apiKey ? `?token=${encodeURIComponent(apiKey)}` : '';
+
+  if (provider === 'stadia') {
+    return {
+      ...styleConfig,
+      baseUrl: `${styleConfig.baseUrl}${stadiaKeySuffix}`,
+    };
+  }
+
+  if (provider === 'esri') {
+    return {
+      ...styleConfig,
+      baseUrl: `${styleConfig.baseUrl}${esriTokenSuffix}`,
+      labelsUrl: styleConfig.labelsUrl ? `${styleConfig.labelsUrl}${esriTokenSuffix}` : null,
+    };
+  }
+
+  return styleConfig;
+}
+
+function getEnabledLayerKeys(config) {
+  const requestedLayers = Array.isArray(config?.enabled_layers)
+    ? config.enabled_layers.filter((key) => BOM_LAYERS[key])
+    : [];
+
+  if (requestedLayers.length) {
+    return requestedLayers;
+  }
+
+  return [...DEFAULT_ENABLED_LAYERS];
+}
+
+function getGroupedLayerEntries(layerKeys) {
+  return BOM_LAYER_GROUPS
+    .map((groupName) => ({
+      groupName,
+      entries: layerKeys
+        .filter((key) => BOM_LAYERS[key]?.category === groupName)
+        .map((key) => [key, BOM_LAYERS[key]]),
+    }))
+    .filter((group) => group.entries.length);
 }
 
 // SVG icons
@@ -513,8 +679,8 @@ const LEAFLET_CSS = `
 .leaflet-touch .leaflet-control-zoom-in,.leaflet-touch .leaflet-control-zoom-out{font-size:22px}
 .leaflet-map-pane,.leaflet-tile,.leaflet-marker-icon,.leaflet-marker-shadow,.leaflet-tile-container,.leaflet-pane>svg,.leaflet-pane>canvas,.leaflet-zoom-box,.leaflet-image-layer,.leaflet-layer{position:absolute;left:0;top:0;pointer-events:none}
 .leaflet-tile-pane{pointer-events:auto}
-.leaflet-control{position:relative;z-index:800;pointer-events:visiblePainted;pointer-events:auto}
-.leaflet-top,.leaflet-bottom{position:absolute;z-index:1000;pointer-events:none}
+.leaflet-control{position:relative;z-index:2;pointer-events:visiblePainted;pointer-events:auto}
+.leaflet-top,.leaflet-bottom{position:absolute;z-index:3;pointer-events:none}
 .leaflet-top{top:0}.leaflet-right{right:0}.leaflet-bottom{bottom:0}.leaflet-left{left:0}
 .leaflet-control{float:left;clear:both}
 .leaflet-right .leaflet-control{float:right}
@@ -557,6 +723,9 @@ const CARD_CSS = `
 }
 ha-card {
   overflow: hidden;
+  position: relative;
+  isolation: isolate;
+  z-index: 0;
   border-radius: var(--bom-card-radius, var(--ha-card-border-radius, 12px));
   background: var(--ha-card-background, var(--card-background-color, rgba(26, 26, 46, 0.6)));
   box-shadow: var(--ha-card-box-shadow, none);
@@ -569,6 +738,7 @@ ha-card {
   --bom-track-radius: 1.5px;
   padding: 0;
   position: relative;
+  isolation: isolate;
 }
 .card-content.is-square {
   --bom-card-radius: 0px;
@@ -597,7 +767,7 @@ ha-card {
   bottom: 10px;
   left: 10px;
   right: 10px;
-  z-index: 1000;
+  z-index: 4;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -645,9 +815,13 @@ ha-card {
   padding: 0 2px;
 }
 .frame-dot {
+  appearance: none;
+  -webkit-appearance: none;
   flex: 1;
   height: 3px;
   border-radius: var(--bom-track-radius);
+  border: 0;
+  padding: 0;
   background: rgba(255, 255, 255, 0.1);
   cursor: pointer;
   transition: background 0.2s, height 0.15s, box-shadow 0.2s;
@@ -656,6 +830,10 @@ ha-card {
 .frame-dot:hover {
   background: rgba(255, 255, 255, 0.25);
   height: 5px;
+}
+.frame-dot:focus-visible {
+  outline: 2px solid #00BCD4;
+  outline-offset: 2px;
 }
 .frame-dot.active {
   background: #00BCD4;
@@ -683,7 +861,7 @@ ha-card {
   position: absolute;
   top: 10px;
   left: 10px;
-  z-index: 1000;
+  z-index: 4;
   padding: 4px 10px;
   background: rgba(10, 10, 24, 0.7);
   backdrop-filter: blur(8px);
@@ -704,7 +882,7 @@ ha-card {
   top: 0;
   left: 0;
   right: 0;
-  z-index: 1000;
+  z-index: 4;
   pointer-events: none;
 }
 .legend-scale {
@@ -720,7 +898,7 @@ ha-card {
   left: 0;
   right: 0;
   bottom: 0;
-  z-index: 1001;
+  z-index: 5;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1158,6 +1336,10 @@ class BomRadarCard extends HTMLElement {
 
   setConfig(config) {
     if (!config) throw new Error('Invalid configuration');
+    const basemapProvider = getBasemapProvider(config);
+    const darkBasemap = config.dark_basemap !== false;
+    const enabledLayers = getEnabledLayerKeys(config);
+    const activeLayer = enabledLayers.includes(config.layer) ? config.layer : enabledLayers[0] || 'reflectivity';
     this._config = {
       center_latitude: config.center_latitude,
       center_longitude: config.center_longitude,
@@ -1165,7 +1347,8 @@ class BomRadarCard extends HTMLElement {
       frame_count: Math.min(9, Math.max(1, config.frame_count || 9)),
       frame_delay: config.frame_delay || 500,
       restart_delay: config.restart_delay || 1500,
-      layer: BOM_LAYERS[config.layer] ? config.layer : 'reflectivity',
+      layer: activeLayer,
+      enabled_layers: enabledLayers,
       show_marker: config.show_marker !== false,
       show_zoom: config.show_zoom !== false,
       show_recenter: config.show_recenter !== false,
@@ -1176,7 +1359,12 @@ class BomRadarCard extends HTMLElement {
       show_attribution: config.show_attribution !== false,
       show_layer_label: config.show_layer_label === true,
       map_height: config.map_height || 300,
-      dark_basemap: config.dark_basemap !== false,
+      dark_basemap: darkBasemap,
+      basemap_provider: basemapProvider,
+      basemap_style: BASEMAP_PROVIDER_STYLES[basemapProvider]?.[config.basemap_style]
+        ? config.basemap_style
+        : getDefaultBasemapStyle(basemapProvider, darkBasemap),
+      basemap_api_key: config.basemap_api_key,
       marker_latitude: config.marker_latitude,
       marker_longitude: config.marker_longitude,
       radar_opacity: Math.min(1, Math.max(0.1, config.radar_opacity || 0.7)),
@@ -1260,7 +1448,7 @@ class BomRadarCard extends HTMLElement {
 
     const lat = this._config.center_latitude ?? this._hass?.config?.latitude ?? -33.87;
     const lon = this._config.center_longitude ?? this._hass?.config?.longitude ?? 151.21;
-    const basemapConfig = getBasemapConfig(this._config.dark_basemap);
+    const basemapConfig = getBasemapConfig(this._config);
 
     container.style.background = basemapConfig.background;
 
@@ -1291,7 +1479,7 @@ class BomRadarCard extends HTMLElement {
 
     // Base tiles (below radar)
     L.tileLayer(basemapConfig.baseUrl, {
-      attribution: '&copy; <a href="https://carto.com">CARTO</a> | &copy; <a href="http://www.bom.gov.au">BOM</a>',
+      attribution: basemapConfig.attribution,
       subdomains: 'abcd',
       maxZoom: MAX_DISPLAY_ZOOM,
     }).addTo(this._map);
@@ -1395,10 +1583,7 @@ class BomRadarCard extends HTMLElement {
       button.setAttribute('aria-haspopup', 'true');
       button.setAttribute('aria-expanded', 'false');
 
-      BOM_LAYER_GROUPS.forEach((groupName) => {
-        const entries = Object.entries(BOM_LAYERS).filter(([, layer]) => layer.category === groupName);
-        if (!entries.length) return;
-
+      getGroupedLayerEntries(this._config.enabled_layers || DEFAULT_ENABLED_LAYERS).forEach(({ groupName, entries }) => {
         const group = L.DomUtil.create('div', 'bom-layer-group', panel);
         group.textContent = groupName;
 
@@ -1582,8 +1767,11 @@ class BomRadarCard extends HTMLElement {
 
     timeline.innerHTML = '';
     for (let i = 0; i < this._timestamps.length; i++) {
-      const dot = document.createElement('div');
+      const dot = document.createElement('button');
+      const layerConfig = BOM_LAYERS[this._config.layer] || BOM_LAYERS.reflectivity;
       dot.className = 'frame-dot' + (i === this._currentFrame ? ' active' : i < this._currentFrame ? ' past' : '');
+      dot.type = 'button';
+      dot.setAttribute('aria-label', `Show ${formatLayerTimestamp(layerConfig, this._timestamps[i])}`);
       dot.addEventListener('click', () => {
         this._stopAnimation();
         this._showFrame(i);
@@ -1685,6 +1873,12 @@ class BomRadarCardEditor extends HTMLElement {
 
   _render() {
     const cfg = this._config;
+    const basemapProvider = getBasemapProvider(cfg);
+    const basemapStyle = BASEMAP_PROVIDER_STYLES[basemapProvider]?.[cfg.basemap_style]
+      ? cfg.basemap_style
+      : getDefaultBasemapStyle(basemapProvider, cfg.dark_basemap !== false);
+    const enabledLayerKeys = getEnabledLayerKeys(cfg);
+    const groupedLayers = getGroupedLayerEntries(enabledLayerKeys);
     this.shadowRoot.innerHTML = `
       <style>
         .editor { padding:16px; }
@@ -1695,15 +1889,21 @@ class BomRadarCardEditor extends HTMLElement {
         .row-inline>.row { flex:1; }
         label { display:block; font-size:12px; font-weight:500; margin-bottom:4px; color:var(--primary-text-color); }
         select,input[type="number"] { width:100%; padding:8px 10px; border:1px solid var(--divider-color); border-radius:10px; background:var(--card-background-color); color:var(--primary-text-color); font-size:14px; box-sizing:border-box; }
-        select:focus,input:focus { outline:none; border-color:#00BCD4; }
+        input[type="password"] { width:100%; padding:8px 10px; border:1px solid var(--divider-color); border-radius:10px; background:var(--card-background-color); color:var(--primary-text-color); font-size:14px; box-sizing:border-box; }
+        select:focus-visible,input:focus-visible { outline:2px solid #00BCD4; outline-offset:1px; border-color:#00BCD4; }
         .toggle-row { display:flex; align-items:center; justify-content:space-between; padding:4px 0; }
         .toggle-label { font-size:13px; color:var(--primary-text-color); }
         .toggle { position:relative; width:36px; height:20px; flex-shrink:0; }
         .toggle input { opacity:0; width:0; height:0; }
         .toggle-slider { position:absolute; cursor:pointer; inset:0; background:rgba(255,255,255,0.12); border-radius:10px; transition:background 0.2s; }
         .toggle-slider::before { position:absolute; content:''; height:16px; width:16px; left:2px; bottom:2px; background:#fff; border-radius:50%; transition:transform 0.2s; }
+        .toggle input:focus-visible+.toggle-slider { box-shadow:0 0 0 2px #00BCD4; }
         .toggle input:checked+.toggle-slider { background:#00BCD4; }
         .toggle input:checked+.toggle-slider::before { transform:translateX(16px); }
+        .help-text { margin-top:6px; font-size:11px; line-height:1.4; color:var(--secondary-text-color); }
+        .layer-list { max-height:320px; overflow:auto; padding:2px 2px 0; }
+        .layer-group-title { margin:12px 0 4px; font-size:10px; font-weight:700; letter-spacing:0.08em; text-transform:uppercase; color:var(--secondary-text-color); }
+        .layer-group-title:first-child { margin-top:0; }
       </style>
       <div class="editor">
         <div class="section">
@@ -1711,14 +1911,11 @@ class BomRadarCardEditor extends HTMLElement {
           <div class="row">
             <label>Layer</label>
             <select id="layer">
-              ${BOM_LAYER_GROUPS.map((groupName) => {
-                const options = Object.entries(BOM_LAYERS)
-                  .filter(([, layer]) => layer.category === groupName)
-                  .map(([key, val]) =>
-                    `<option value="${key}" ${cfg.layer === key ? 'selected' : ''}>${val.name} (${val.unit})</option>`
-                  )
-                  .join('');
-                return options ? `<optgroup label="${groupName}">${options}</optgroup>` : '';
+              ${groupedLayers.map(({ groupName, entries }) => {
+                const options = entries.map(([key, val]) =>
+                  `<option value="${key}" ${cfg.layer === key ? 'selected' : ''}>${val.name} (${val.unit})</option>`
+                ).join('');
+                return `<optgroup label="${groupName}">${options}</optgroup>`;
               }).join('')}
             </select>
           </div>
@@ -1735,7 +1932,46 @@ class BomRadarCardEditor extends HTMLElement {
         </div>
 
         <div class="section">
+          <div class="section-title">Visible Layers</div>
+          <div class="layer-list">
+            ${BOM_LAYER_GROUPS.map((groupName) => {
+              const entries = Object.entries(BOM_LAYERS).filter(([, layer]) => layer.category === groupName);
+              if (!entries.length) return '';
+              return `
+                <div class="layer-group-title">${groupName}</div>
+                ${entries.map(([key, layer]) =>
+                  this._toggle(`enabled_layer__${key}`, `${layer.name} (${layer.unit})`, enabledLayerKeys.includes(key))
+                ).join('')}
+              `;
+            }).join('')}
+          </div>
+        </div>
+
+        <div class="section">
           <div class="section-title">Map</div>
+          <div class="row-inline">
+            <div class="row">
+              <label>Basemap Provider</label>
+              <select id="basemap_provider">
+                ${Object.entries(BASEMAP_PROVIDER_NAMES).map(([key, label]) =>
+                  `<option value="${key}" ${basemapProvider === key ? 'selected' : ''}>${label}</option>`
+                ).join('')}
+              </select>
+            </div>
+            <div class="row">
+              <label>Basemap Style</label>
+              <select id="basemap_style">
+                ${getBasemapStyleOptions(basemapProvider).map((style) =>
+                  `<option value="${style.value}" ${basemapStyle === style.value ? 'selected' : ''}>${style.label}</option>`
+                ).join('')}
+              </select>
+            </div>
+          </div>
+          <div class="row">
+            <label>Basemap API Key (Optional)</label>
+            <input type="password" id="basemap_api_key" value="${cfg.basemap_api_key || ''}" autocomplete="off">
+            <div class="help-text">Not needed for CARTO. Stadia Maps and Esri can work with free-tier accounts, but some styles or host setups may still require a valid key.</div>
+          </div>
           <div class="row-inline">
             <div class="row">
               <label>Zoom (3-8)</label>
@@ -1774,7 +2010,6 @@ class BomRadarCardEditor extends HTMLElement {
 
         <div class="section">
           <div class="section-title">Display</div>
-          ${this._toggle('dark_basemap', 'Dark basemap', cfg.dark_basemap !== false)}
           ${this._toggle('show_marker', 'Home marker', cfg.show_marker !== false)}
           ${this._toggle('show_zoom', 'Zoom controls', cfg.show_zoom !== false)}
           ${this._toggle('show_recenter', 'Recenter button', cfg.show_recenter !== false)}
@@ -1804,7 +2039,8 @@ class BomRadarCardEditor extends HTMLElement {
 
     // Bind events
     const fields = [
-      'layer', 'zoom_level', 'map_height', 'center_latitude', 'center_longitude',
+      'layer', 'basemap_provider', 'basemap_style', 'basemap_api_key',
+      'zoom_level', 'map_height', 'center_latitude', 'center_longitude',
       'frame_delay', 'restart_delay', 'radar_opacity', 'frame_count',
       'marker_latitude', 'marker_longitude',
     ];
@@ -1814,11 +2050,16 @@ class BomRadarCardEditor extends HTMLElement {
     });
 
     const toggles = [
-      'dark_basemap', 'show_marker', 'show_zoom', 'show_recenter', 'show_layer_switcher', 'show_playback',
+      'show_marker', 'show_zoom', 'show_recenter', 'show_layer_switcher', 'show_playback',
       'show_legend', 'square_style', 'show_layer_label', 'show_attribution',
     ];
     toggles.forEach(id => {
       const el = this.shadowRoot.getElementById(id);
+      if (el) el.addEventListener('change', () => this._valueChanged());
+    });
+
+    Object.keys(BOM_LAYERS).forEach((key) => {
+      const el = this.shadowRoot.getElementById(`enabled_layer__${key}`);
       if (el) el.addEventListener('change', () => this._valueChanged());
     });
   }
@@ -1843,6 +2084,43 @@ class BomRadarCardEditor extends HTMLElement {
     const layer = get('layer');
     if (layer) config.layer = layer.value;
 
+    const selectedLayerKeys = Object.keys(BOM_LAYERS).filter((key) => {
+      const el = get(`enabled_layer__${key}`);
+      return el?.checked;
+    });
+
+    const nextEnabledLayers = selectedLayerKeys.length ? selectedLayerKeys : [config.layer].filter((key) => BOM_LAYERS[key]);
+    if (nextEnabledLayers.length && nextEnabledLayers.length < DEFAULT_ENABLED_LAYERS.length) {
+      config.enabled_layers = nextEnabledLayers;
+    } else {
+      delete config.enabled_layers;
+    }
+
+    if (nextEnabledLayers.length && !nextEnabledLayers.includes(config.layer)) {
+      config.layer = nextEnabledLayers[0];
+    }
+
+    const basemapProvider = get('basemap_provider');
+    if (basemapProvider) config.basemap_provider = basemapProvider.value;
+
+    const basemapStyle = get('basemap_style');
+    if (basemapStyle) {
+      const nextProvider = getBasemapProvider(config);
+      config.basemap_style = BASEMAP_PROVIDER_STYLES[nextProvider]?.[basemapStyle.value]
+        ? basemapStyle.value
+        : getDefaultBasemapStyle(nextProvider, config.dark_basemap !== false);
+      config.dark_basemap = isDarkBasemapStyle(nextProvider, config.basemap_style);
+    }
+
+    const basemapApiKey = get('basemap_api_key');
+    if (basemapApiKey) {
+      if (basemapApiKey.value === '') {
+        delete config.basemap_api_key;
+      } else {
+        config.basemap_api_key = basemapApiKey.value;
+      }
+    }
+
 
     const numFields = {
       zoom_level: 'int', map_height: 'int', frame_delay: 'int',
@@ -1863,7 +2141,7 @@ class BomRadarCardEditor extends HTMLElement {
     });
 
     const toggleFields = [
-      'dark_basemap', 'show_marker', 'show_zoom', 'show_recenter', 'show_layer_switcher', 'show_playback',
+      'show_marker', 'show_zoom', 'show_recenter', 'show_layer_switcher', 'show_playback',
       'show_legend', 'square_style', 'show_layer_label', 'show_attribution',
     ];
     toggleFields.forEach(id => {
