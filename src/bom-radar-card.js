@@ -2114,7 +2114,7 @@ class BomRadarCardEditor extends HTMLElement {
           <div class="row">
             <label>Basemap API Key (Optional)</label>
             <input type="password" id="basemap_api_key" value="${cfg.basemap_api_key || ''}" autocomplete="off">
-            <div class="help-text">Not needed for CARTO. Stadia Maps and Esri can work with free-tier accounts, but some styles or host setups may still require a valid key.</div>
+            <div class="help-text">Not needed for CARTO. Stadia Maps and Esri may require a key depending on the selected style and how your Home Assistant instance is hosted. See the README for provider setup links.</div>
           </div>
           <div class="row-inline">
             <div class="row">

@@ -150,6 +150,21 @@ This does **not** add extra native BOM radar detail. It simply allows the card t
 
 Both Stadia Maps and Esri offer free-tier access, but the exact limits and which styles are included can vary by provider plan. CARTO remains the safest no-key default.
 
+Important notes:
+
+- `localhost` testing is not the same thing as a normal Home Assistant install on a LAN hostname or IP. A provider that appears keyless in local testing may still require a key for real users.
+- Stadia Maps authentication requirements vary by host setup, and some styles may be plan-dependent.
+- Esri also has an authenticated API-key path for their modern basemap services, even if some legacy tile endpoints appear to work anonymously.
+
+Provider setup:
+
+- Stadia Maps: create an account and API key from the official docs and dashboard
+  - [Authentication docs](https://docs.stadiamaps.com/authentication/)
+  - [Pricing](https://stadiamaps.com/pricing/)
+- Esri / ArcGIS: create an ArcGIS Location Platform account and API key
+  - [API keys and security](https://developers.arcgis.com/documentation/security-and-authentication/api-key-authentication/)
+  - [Basemap Styles service](https://developers.arcgis.com/rest/basemap-styles/)
+
 ### UI Polish And Accent Controls
 
 - `chrome_opacity` lets you soften or strengthen the card chrome without affecting the weather overlay itself
