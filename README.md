@@ -20,6 +20,8 @@ Current release: **v1.6.0**
 
 - Use [GitHub Discussions](https://github.com/AshtonAU/bom-radar-card/discussions) for general feedback, setup questions, ideas, and screenshots.
 - Use [GitHub Issues](https://github.com/AshtonAU/bom-radar-card/issues) for reproducible bugs and concrete feature requests.
+- See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution/reporting guidance.
+- See [SECURITY.md](SECURITY.md) before posting anything sensitive publicly.
 
 ## Support The Project
 

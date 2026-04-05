@@ -3,3 +3,6 @@ contact_links:
   - name: General feedback and ideas
     url: https://github.com/AshtonAU/bom-radar-card/discussions
     about: Use Discussions for general feedback, setup questions, and project discussion.
+  - name: Security and responsible disclosure
+    url: https://github.com/AshtonAU/bom-radar-card/blob/main/SECURITY.md
+    about: Please read the security reporting guidance before posting anything sensitive publicly.
