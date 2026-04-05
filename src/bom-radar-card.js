@@ -6,7 +6,7 @@
  * License: MIT
  */
 
-const CARD_VERSION = '1.6.1';
+const CARD_VERSION = '1.6.2';
 const DEFAULT_ACCENT_COLOR = '#00BCD4';
 const DEFAULT_UI_ACCENT_COLOR = '#F8FAFC';
 
