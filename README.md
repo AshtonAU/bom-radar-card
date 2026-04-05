@@ -81,8 +81,9 @@ That's it — it will use your Home Assistant location as the default center.
 | `layer` | string | `reflectivity` | BOM layer (see table below) |
 | `center_latitude` | number | HA config | Map center latitude |
 | `center_longitude` | number | HA config | Map center longitude |
-| `zoom_level` | number | `7` | Map zoom level (3–8). Capped to BOM's native WMTS zoom range for cleaner layer alignment |
+| `zoom_level` | number | `7` | Map zoom level. Default range is 3–8, or 3–10 when `allow_overzoom` is enabled |
 | `map_height` | number | `300` | Card height in pixels |
+| `allow_overzoom` | boolean | `false` | Experimental closer-view mode. Allows display zoom up to 10 by scaling BOM's native z8 radar tiles |
 | `basemap_provider` | string | `carto` | Basemap provider: `carto`, `stadia`, or `esri` |
 | `basemap_style` | string | provider default | Basemap style for the selected provider |
 | `basemap_api_key` | string | none | Optional provider API key. Not used for CARTO |
@@ -121,6 +122,19 @@ show_marker: true
 show_layer_switcher: true
 square_style: false
 ```
+
+### Optional Overzoom
+
+If you want a closer local view without waiting for a separate local-radar mode, you can enable experimental overzoom:
+
+```yaml
+type: custom:bom-radar-card
+layer: reflectivity
+zoom_level: 10
+allow_overzoom: true
+```
+
+This does **not** add extra native BOM radar detail. It simply allows the card to scale BOM's native `z8` radar tiles up to a display zoom of `10`, which can be useful for local inspection but may look softer than BOM's dedicated local `64 km / 128 km` radar products.
 
 ### Basemap Providers
 

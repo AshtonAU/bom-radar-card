@@ -457,6 +457,7 @@ const TILE_MATRIX_SETS = {
 const MIN_MAP_ZOOM = 3;
 const MAX_BOM_NATIVE_ZOOM = 8;
 const MAX_DISPLAY_ZOOM = 8;
+const MAX_OVERZOOM_DISPLAY_ZOOM = 10;
 
 const HALF_EXTENT = 20037508.342789244;
 const WORLD_EXTENT = HALF_EXTENT * 2;
@@ -644,6 +645,10 @@ function getEnabledLayerKeys(config) {
   }
 
   return [...DEFAULT_ENABLED_LAYERS];
+}
+
+function getConfiguredMaxDisplayZoom(config) {
+  return config?.allow_overzoom ? MAX_OVERZOOM_DISPLAY_ZOOM : MAX_DISPLAY_ZOOM;
 }
 
 function getGroupedLayerEntries(layerKeys) {
@@ -1340,10 +1345,12 @@ class BomRadarCard extends HTMLElement {
     const darkBasemap = config.dark_basemap !== false;
     const enabledLayers = getEnabledLayerKeys(config);
     const activeLayer = enabledLayers.includes(config.layer) ? config.layer : enabledLayers[0] || 'reflectivity';
+    const allowOverzoom = config.allow_overzoom === true;
+    const maxDisplayZoom = getConfiguredMaxDisplayZoom({ allow_overzoom: allowOverzoom });
     this._config = {
       center_latitude: config.center_latitude,
       center_longitude: config.center_longitude,
-      zoom_level: Math.min(MAX_DISPLAY_ZOOM, Math.max(MIN_MAP_ZOOM, config.zoom_level || 7)),
+      zoom_level: Math.min(maxDisplayZoom, Math.max(MIN_MAP_ZOOM, config.zoom_level || 7)),
       frame_count: Math.min(9, Math.max(1, config.frame_count || 9)),
       frame_delay: config.frame_delay || 500,
       restart_delay: config.restart_delay || 1500,
@@ -1368,6 +1375,8 @@ class BomRadarCard extends HTMLElement {
       marker_latitude: config.marker_latitude,
       marker_longitude: config.marker_longitude,
       radar_opacity: Math.min(1, Math.max(0.1, config.radar_opacity || 0.7)),
+      allow_overzoom: allowOverzoom,
+      max_display_zoom: maxDisplayZoom,
       card_mod: config.card_mod,
     };
   }
@@ -1459,7 +1468,7 @@ class BomRadarCard extends HTMLElement {
       attributionControl: this._config.show_attribution,
       maxBounds: [[-55, 95], [5, 175]],
       minZoom: MIN_MAP_ZOOM,
-      maxZoom: MAX_DISPLAY_ZOOM,
+      maxZoom: this._config.max_display_zoom,
     });
     if (this._config.show_attribution && this._map.attributionControl) {
       this._map.attributionControl.setPrefix(false);
@@ -1481,7 +1490,7 @@ class BomRadarCard extends HTMLElement {
     L.tileLayer(basemapConfig.baseUrl, {
       attribution: basemapConfig.attribution,
       subdomains: 'abcd',
-      maxZoom: MAX_DISPLAY_ZOOM,
+      maxZoom: this._config.max_display_zoom,
     }).addTo(this._map);
 
     // Load radar data (middle layer)
@@ -1491,7 +1500,7 @@ class BomRadarCard extends HTMLElement {
     if (basemapConfig.labelsUrl) {
       L.tileLayer(basemapConfig.labelsUrl, {
         subdomains: 'abcd',
-        maxZoom: MAX_DISPLAY_ZOOM,
+        maxZoom: this._config.max_display_zoom,
         pane: 'overlayPane',
       }).addTo(this._map);
     }
@@ -1708,7 +1717,7 @@ class BomRadarCard extends HTMLElement {
       const time = this._timestamps[i];
       const layer = createBomTileLayer(L, layerConfig.id, layerConfig.tileMatrixSet, time, {
         opacity: i === activeFrame ? this._config.radar_opacity : 0,
-        maxZoom: MAX_DISPLAY_ZOOM,
+        maxZoom: this._config.max_display_zoom,
         maxNativeZoom: MAX_BOM_NATIVE_ZOOM,
         minZoom: MIN_MAP_ZOOM,
       });
@@ -1947,8 +1956,8 @@ class BomRadarCardEditor extends HTMLElement {
           </div>
         </div>
 
-        <div class="section">
-          <div class="section-title">Map</div>
+      <div class="section">
+        <div class="section-title">Map</div>
           <div class="row-inline">
             <div class="row">
               <label>Basemap Provider</label>
@@ -1974,14 +1983,16 @@ class BomRadarCardEditor extends HTMLElement {
           </div>
           <div class="row-inline">
             <div class="row">
-              <label>Zoom (3-8)</label>
-              <input type="number" id="zoom_level" min="3" max="8" value="${cfg.zoom_level || 7}">
+              <label>Zoom (3-${cfg.allow_overzoom === true ? MAX_OVERZOOM_DISPLAY_ZOOM : MAX_DISPLAY_ZOOM})</label>
+              <input type="number" id="zoom_level" min="3" max="${cfg.allow_overzoom === true ? MAX_OVERZOOM_DISPLAY_ZOOM : MAX_DISPLAY_ZOOM}" value="${cfg.zoom_level || 7}">
             </div>
             <div class="row">
               <label>Height (px)</label>
               <input type="number" id="map_height" min="150" max="800" value="${cfg.map_height || 300}">
             </div>
           </div>
+          ${this._toggle('allow_overzoom', 'Allow overzoom (Experimental)', cfg.allow_overzoom === true)}
+          <div class="help-text">Off by default. When enabled, the card can zoom to 10 by scaling BOM&apos;s native z8 radar tiles for a closer local view. This does not add extra native radar detail.</div>
           <div class="row-inline">
             <div class="row">
               <label>Center Lat</label>
@@ -2051,7 +2062,7 @@ class BomRadarCardEditor extends HTMLElement {
 
     const toggles = [
       'show_marker', 'show_zoom', 'show_recenter', 'show_layer_switcher', 'show_playback',
-      'show_legend', 'square_style', 'show_layer_label', 'show_attribution',
+      'show_legend', 'square_style', 'show_layer_label', 'show_attribution', 'allow_overzoom',
     ];
     toggles.forEach(id => {
       const el = this.shadowRoot.getElementById(id);
@@ -2142,12 +2153,17 @@ class BomRadarCardEditor extends HTMLElement {
 
     const toggleFields = [
       'show_marker', 'show_zoom', 'show_recenter', 'show_layer_switcher', 'show_playback',
-      'show_legend', 'square_style', 'show_layer_label', 'show_attribution',
+      'show_legend', 'square_style', 'show_layer_label', 'show_attribution', 'allow_overzoom',
     ];
     toggleFields.forEach(id => {
       const el = get(id);
       if (el) config[id] = el.checked;
     });
+
+    const maxDisplayZoom = getConfiguredMaxDisplayZoom(config);
+    if (typeof config.zoom_level === 'number') {
+      config.zoom_level = Math.min(maxDisplayZoom, Math.max(MIN_MAP_ZOOM, config.zoom_level));
+    }
 
     this._config = config;
     this.dispatchEvent(new CustomEvent('config-changed', { detail: { config } }));
