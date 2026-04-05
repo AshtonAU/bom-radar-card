@@ -11,7 +11,7 @@ This card exists as a modern replacement for older Home Assistant BOM radar card
 [![GitHub Sponsors](https://img.shields.io/badge/Sponsor-GitHub%20Sponsors-ea4aaa?logo=githubsponsors&logoColor=white)](https://github.com/sponsors/AshtonAU)
 [![Buy Me a Coffee](https://img.shields.io/badge/Support-Buy%20Me%20a%20Coffee-FFDD00?logo=buymeacoffee&logoColor=000000)](https://buymeacoffee.com/ashtonau)
 
-Current release: **v1.6.0**
+Current release: **v1.6.1**
 
 > [!IMPORTANT]
 > If you previously installed another BOM radar card, remove its HACS entry and dashboard resource before adding this one. Home Assistant can keep multiple similarly named Lovelace resources loaded at the same time, which can cause broken or unpredictable behaviour. After switching cards, do a hard refresh / clear browser cache so the new resource is actually loaded.
@@ -60,7 +60,7 @@ The card reads BOM's published WMTS time dimension and loads 256x256 PNG tiles a
 
 ### Manual
 
-1. Download `bom-radar-card.js` from the [latest release](https://github.com/AshtonAU/bom-radar-card/releases) (`v1.6.0` at the time of writing)
+1. Download `bom-radar-card.js` from the [latest release](https://github.com/AshtonAU/bom-radar-card/releases) (`v1.6.1` at the time of writing)
 2. Copy to `/config/www/bom-radar-card/bom-radar-card.js`
 3. Add resource: **Settings → Dashboards → Resources → Add** `/local/bom-radar-card/bom-radar-card.js` (JavaScript Module)
 
@@ -88,6 +88,9 @@ That's it — it will use your Home Assistant location as the default center.
 | `basemap_style` | string | provider default | Basemap style for the selected provider |
 | `basemap_api_key` | string | none | Optional provider API key. Not used for CARTO |
 | `radar_opacity` | number | `0.7` | Weather overlay opacity (0.1–1.0) |
+| `chrome_opacity` | number | `1.0` | Opacity of the card chrome: controls, playback bar, layer badge, and panels |
+| `accent_color` | string | neutral UI default | Optional custom UI accent color for playback/progress/focus highlights |
+| `location_color` | string | HA accent | Optional custom GPS/home marker color |
 | `frame_count` | number | `9` | Number of animation frames (1–9) |
 | `frame_delay` | number | `500` | Animation speed in milliseconds |
 | `restart_delay` | number | `1500` | Pause at end of loop in milliseconds |
@@ -118,6 +121,7 @@ basemap_provider: carto
 basemap_style: dark
 frame_delay: 400
 radar_opacity: 0.7
+chrome_opacity: 0.9
 show_marker: true
 show_layer_switcher: true
 square_style: false
@@ -145,6 +149,14 @@ This does **not** add extra native BOM radar detail. It simply allows the card t
 `basemap_api_key` is optional in the config, but Stadia Maps and Esri may require a valid key depending on the selected style and the environment the card is hosted from.
 
 Both Stadia Maps and Esri offer free-tier access, but the exact limits and which styles are included can vary by provider plan. CARTO remains the safest no-key default.
+
+### UI Polish And Accent Controls
+
+- `chrome_opacity` lets you soften or strengthen the card chrome without affecting the weather overlay itself
+- `accent_color` controls the UI highlight color for playback/progress/focus states
+- `location_color` controls the GPS/home marker independently from the rest of the UI
+
+By default, the card uses a neutral light UI accent and keeps the location marker tied to your Home Assistant accent color.
 
 ### Limiting The Layer Switcher
 
@@ -217,7 +229,7 @@ The popular `weather-radar-card` uses RainViewer, which reprocesses BOM data and
 - **Data source**: BOM WMTS at `api.bom.gov.au`
 - **Tile format**: 256×256 PNG with transparency
 - **Projection**: BOM's Australian-extent WMTS TileMatrixSets based on EPSG:3857
-- **Max zoom**: Level 8 display, matching BOM's native WMTS tile matrix range
+- **Max zoom**: Level 8 by default, or optional display zoom up to 10 with experimental overzoom enabled
 - **Map library**: Leaflet.js 1.9.4 (loaded from CDN)
 - **Basemap**: CARTO Dark Matter / Voyager split into base and labels layers
 - **Update cycle**: 5 minutes

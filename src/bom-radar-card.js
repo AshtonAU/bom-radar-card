@@ -6,7 +6,9 @@
  * License: MIT
  */
 
-const CARD_VERSION = '1.6.0';
+const CARD_VERSION = '1.6.1';
+const DEFAULT_ACCENT_COLOR = '#00BCD4';
+const DEFAULT_UI_ACCENT_COLOR = '#F8FAFC';
 
 console.info(
   `%c BOM-RADAR-CARD %c v${CARD_VERSION} `,
@@ -662,11 +664,18 @@ function getGroupedLayerEntries(layerKeys) {
     .filter((group) => group.entries.length);
 }
 
+function sanitizeAccentColor(value) {
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  return /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(trimmed) ? trimmed : undefined;
+}
+
 // SVG icons
 const ICON_PLAY = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>';
 const ICON_PAUSE = '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>';
 const ICON_RECENTER = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v3"/><path d="M12 19v3"/><path d="M2 12h3"/><path d="M19 12h3"/></svg>';
 const ICON_LAYERS = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4 4 8l8 4 8-4-8-4Z"/><path d="m4 12 8 4 8-4"/><path d="m4 16 8 4 8-4"/></svg>';
+const ICON_OPACITY = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3s6 6.4 6 10.1A6 6 0 0 1 6 13.1C6 9.4 12 3 12 3Z"/><path d="M9.2 14.8a3.3 3.3 0 0 0 5.6 0"/></svg>';
 
 // Leaflet CSS (minimal, inlined for Shadow DOM)
 const LEAFLET_CSS = `
@@ -689,33 +698,33 @@ const LEAFLET_CSS = `
 .leaflet-top{top:0}.leaflet-right{right:0}.leaflet-bottom{bottom:0}.leaflet-left{left:0}
 .leaflet-control{float:left;clear:both}
 .leaflet-right .leaflet-control{float:right}
-.leaflet-top .leaflet-control{margin-top:10px}
-.leaflet-bottom .leaflet-control{margin-bottom:10px}
-.leaflet-left .leaflet-control{margin-left:10px}
-.leaflet-right .leaflet-control{margin-right:10px}
-.leaflet-control-zoom{border:none;border-radius:var(--bom-control-radius);overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.3)}
-.leaflet-control-zoom a{background-color:rgba(20,20,40,0.85);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);color:rgba(255,255,255,0.7);width:32px;height:32px;line-height:32px;text-align:center;text-decoration:none;display:block;border-bottom:1px solid rgba(255,255,255,0.06);transition:background 0.15s,color 0.15s}
-.leaflet-control-zoom a:hover{background-color:rgba(30,30,60,0.95);color:white}
+.leaflet-top .leaflet-control{margin-top:8px}
+.leaflet-bottom .leaflet-control{margin-bottom:8px}
+.leaflet-left .leaflet-control{margin-left:8px}
+.leaflet-right .leaflet-control{margin-right:8px}
+.leaflet-control-zoom{border:none;border-radius:var(--bom-control-radius);overflow:hidden;box-shadow:0 1px 6px rgba(0,0,0,0.24)}
+.leaflet-control-zoom a{background-color:rgb(14 18 32 / calc(0.72 * var(--bom-chrome-opacity, 1)));backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);color:rgba(255,255,255,0.68);width:30px;height:30px;line-height:30px;text-align:center;text-decoration:none;display:block;border-bottom:1px solid rgb(255 255 255 / calc(0.05 * var(--bom-chrome-opacity, 1)));transition:background 0.15s,color 0.15s,opacity 0.15s}
+.leaflet-control-zoom a:hover{background-color:rgb(18 24 42 / calc(0.84 * var(--bom-chrome-opacity, 1)));color:white}
 .leaflet-control-zoom-in{border-top-left-radius:var(--bom-control-radius);border-top-right-radius:var(--bom-control-radius)}
 .leaflet-control-zoom-out{border-bottom-left-radius:var(--bom-control-radius);border-bottom-right-radius:var(--bom-control-radius);border-bottom:none}
-.leaflet-control-attribution{background:rgba(0,0,0,0.35)!important;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);color:rgba(255,255,255,0.4);font-size:9px;padding:1px 6px;border-radius:var(--bom-attribution-radius);line-height:1.4}
-.leaflet-control-attribution a{color:rgba(100,180,255,0.5);text-decoration:none}
+.leaflet-control-attribution{background:rgb(7 10 18 / calc(0.28 * var(--bom-chrome-opacity, 1)))!important;backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);color:rgba(255,255,255,0.38);font-size:9px;padding:1px 5px;border-radius:var(--bom-attribution-radius);line-height:1.4}
+.leaflet-control-attribution a{color:color-mix(in srgb, var(--bom-ui-accent-color, #F8FAFC) 50%, transparent);text-decoration:none}
 .leaflet-touch .leaflet-control-zoom a{width:36px;height:36px;line-height:36px;font-size:18px}
-.bom-recenter-control{border:none;border-radius:var(--bom-control-radius);overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.3)}
-.bom-recenter-button{appearance:none;-webkit-appearance:none;background-color:rgba(20,20,40,0.85);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);color:rgba(255,255,255,0.7);width:32px;height:32px;padding:0;display:flex;align-items:center;justify-content:center;border:none;cursor:pointer;transition:background 0.15s,color 0.15s}
-.bom-recenter-button:hover{background-color:rgba(30,30,60,0.95);color:white}
+.bom-recenter-control{border:none;border-radius:var(--bom-control-radius);overflow:hidden;box-shadow:0 1px 6px rgba(0,0,0,0.24)}
+.bom-recenter-button{appearance:none;-webkit-appearance:none;background-color:rgb(14 18 32 / calc(0.72 * var(--bom-chrome-opacity, 1)));backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);color:rgba(255,255,255,0.68);width:30px;height:30px;padding:0;display:flex;align-items:center;justify-content:center;border:none;cursor:pointer;transition:background 0.15s,color 0.15s,opacity 0.15s}
+.bom-recenter-button:hover{background-color:rgb(18 24 42 / calc(0.84 * var(--bom-chrome-opacity, 1)));color:white}
 .bom-recenter-button svg{width:16px;height:16px}
 .leaflet-touch .bom-recenter-button{width:36px;height:36px}
 .bom-layer-control{position:relative}
-.bom-layer-button{appearance:none;-webkit-appearance:none;background-color:rgba(20,20,40,0.85);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);color:rgba(255,255,255,0.72);width:32px;height:32px;padding:0;display:flex;align-items:center;justify-content:center;border:none;border-radius:var(--bom-control-radius);cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.3);transition:background 0.15s,color 0.15s}
-.bom-layer-button:hover,.bom-layer-button.is-open{background-color:rgba(30,30,60,0.95);color:white}
+.bom-layer-button{appearance:none;-webkit-appearance:none;background-color:rgb(14 18 32 / calc(0.72 * var(--bom-chrome-opacity, 1)));backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);color:rgba(255,255,255,0.7);width:30px;height:30px;padding:0;display:flex;align-items:center;justify-content:center;border:none;border-radius:var(--bom-control-radius);cursor:pointer;box-shadow:0 1px 6px rgba(0,0,0,0.24);transition:background 0.15s,color 0.15s,opacity 0.15s}
+.bom-layer-button:hover,.bom-layer-button.is-open{background-color:rgb(18 24 42 / calc(0.84 * var(--bom-chrome-opacity, 1)));color:white}
 .bom-layer-button svg{width:16px;height:16px}
-.bom-layer-panel{position:absolute;top:0;right:40px;min-width:156px;padding:4px;display:none;flex-direction:column;gap:3px;background:rgba(10,10,24,0.92);backdrop-filter:blur(16px) saturate(1.6);-webkit-backdrop-filter:blur(16px) saturate(1.6);border:1px solid rgba(255,255,255,0.08);border-radius:var(--bom-control-radius);box-shadow:0 10px 24px rgba(0,0,0,0.32)}
+.bom-layer-panel{position:absolute;top:0;right:38px;min-width:156px;padding:4px;display:none;flex-direction:column;gap:3px;background:rgb(8 11 20 / calc(0.86 * var(--bom-chrome-opacity, 1)));backdrop-filter:blur(12px) saturate(1.35);-webkit-backdrop-filter:blur(12px) saturate(1.35);border:1px solid rgb(255 255 255 / calc(0.06 * var(--bom-chrome-opacity, 1)));border-radius:var(--bom-control-radius);box-shadow:0 8px 22px rgba(0,0,0,0.28)}
 .bom-layer-panel.is-open{display:flex}
 .bom-layer-panel{max-height:min(70vh,520px);overflow:auto;overscroll-behavior:contain}
-.bom-layer-group{padding:8px 10px 4px;font-size:10px;font-weight:700;line-height:1;letter-spacing:0.1em;text-transform:uppercase;color:rgba(255,255,255,0.4)}
-.bom-layer-option{appearance:none;-webkit-appearance:none;width:100%;padding:8px 10px;border:none;border-radius:calc(var(--bom-control-radius) - 2px);background:transparent;color:rgba(255,255,255,0.72);cursor:pointer;text-align:left;transition:background 0.15s,color 0.15s}
-.bom-layer-option:hover,.bom-layer-option.is-active{background:rgba(255,255,255,0.1);color:white}
+.bom-layer-group{padding:8px 10px 4px;font-size:10px;font-weight:700;line-height:1;letter-spacing:0.1em;text-transform:uppercase;color:rgba(255,255,255,0.34)}
+.bom-layer-option{appearance:none;-webkit-appearance:none;width:100%;padding:8px 10px;border:none;border-radius:calc(var(--bom-control-radius) - 2px);background:transparent;color:rgba(255,255,255,0.68);cursor:pointer;text-align:left;transition:background 0.15s,color 0.15s}
+.bom-layer-option:hover,.bom-layer-option.is-active{background:rgb(255 255 255 / calc(0.08 * var(--bom-chrome-opacity, 1)));color:white}
 .bom-layer-option-name{display:block;font-size:12px;font-weight:600;line-height:1.2}
 .bom-layer-option-unit{display:block;margin-top:2px;font-size:10px;letter-spacing:0.04em;text-transform:uppercase;opacity:0.64}
 .leaflet-touch .bom-layer-button{width:36px;height:36px}
@@ -738,7 +747,7 @@ ha-card {
 .card-content {
   --bom-control-radius: 8px;
   --bom-badge-radius: 8px;
-  --bom-bar-radius: 14px;
+  --bom-bar-radius: 12px;
   --bom-attribution-radius: 6px 0 0 0;
   --bom-track-radius: 1.5px;
   padding: 0;
@@ -754,10 +763,10 @@ ha-card {
   --bom-track-radius: 0px;
 }
 .card-content.has-top-legend .layer-badge {
-  top: 18px;
+  top: 16px;
 }
 .card-content.has-top-legend .leaflet-top .leaflet-control {
-  margin-top: 22px;
+  margin-top: 18px;
 }
 #map {
   width: 100%;
@@ -769,45 +778,103 @@ ha-card {
 /* Controls bar */
 .controls {
   position: absolute;
-  bottom: 10px;
-  left: 10px;
-  right: 10px;
+  bottom: 8px;
+  left: 8px;
+  right: 8px;
   z-index: 4;
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 10px;
-  background: rgba(10, 10, 24, 0.8);
-  backdrop-filter: blur(16px) saturate(1.8);
-  -webkit-backdrop-filter: blur(16px) saturate(1.8);
+  gap: 7px;
+  padding: 5px 9px;
+  background: rgb(8 11 20 / calc(0.74 * var(--bom-chrome-opacity, 1)));
+  backdrop-filter: blur(12px) saturate(1.35);
+  -webkit-backdrop-filter: blur(12px) saturate(1.35);
   border-radius: var(--bom-bar-radius);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+  border: 1px solid rgb(255 255 255 / calc(0.05 * var(--bom-chrome-opacity, 1)));
+  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.24);
 }
 .play-btn {
   background: none;
   border: none;
-  color: rgba(255, 255, 255, 0.85);
+  color: rgba(255, 255, 255, 0.78);
   cursor: pointer;
   padding: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: 26px;
+  height: 26px;
   border-radius: var(--bom-control-radius);
   transition: background 0.15s, transform 0.1s;
   flex-shrink: 0;
 }
 .play-btn svg {
-  width: 16px;
-  height: 16px;
+  width: 15px;
+  height: 15px;
 }
 .play-btn:hover {
-  background: rgba(255, 255, 255, 0.1);
+  background: rgb(255 255 255 / calc(0.08 * var(--bom-chrome-opacity, 1)));
 }
 .play-btn:active {
   transform: scale(0.92);
+}
+.opacity-control {
+  position: relative;
+  flex-shrink: 0;
+}
+.opacity-btn {
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.62);
+  cursor: pointer;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--bom-control-radius);
+  transition: background 0.15s, color 0.15s;
+}
+.opacity-btn:hover,
+.opacity-control.is-open .opacity-btn {
+  background: rgb(255 255 255 / calc(0.08 * var(--bom-chrome-opacity, 1)));
+  color: rgba(255, 255, 255, 0.9);
+}
+.opacity-btn svg {
+  width: 14px;
+  height: 14px;
+}
+.opacity-panel {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 8px);
+  display: none;
+  align-items: center;
+  gap: 8px;
+  min-width: 132px;
+  padding: 8px 10px;
+  background: rgb(8 11 20 / calc(0.86 * var(--bom-chrome-opacity, 1)));
+  backdrop-filter: blur(12px) saturate(1.35);
+  -webkit-backdrop-filter: blur(12px) saturate(1.35);
+  border: 1px solid rgb(255 255 255 / calc(0.06 * var(--bom-chrome-opacity, 1)));
+  border-radius: 10px;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.28);
+}
+.opacity-control.is-open .opacity-panel {
+  display: flex;
+}
+.opacity-slider {
+  width: 84px;
+  accent-color: var(--bom-ui-accent-color, #F8FAFC);
+}
+.opacity-value {
+  min-width: 34px;
+  color: rgba(255, 255, 255, 0.58);
+  font-size: 10px;
+  font-weight: 600;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 
 /* Timeline */
@@ -816,7 +883,7 @@ ha-card {
   display: flex;
   align-items: center;
   gap: 3px;
-  height: 28px;
+  height: 24px;
   padding: 0 2px;
 }
 .frame-dot {
@@ -837,24 +904,24 @@ ha-card {
   height: 5px;
 }
 .frame-dot:focus-visible {
-  outline: 2px solid #00BCD4;
+  outline: 2px solid var(--bom-ui-accent-color, #F8FAFC);
   outline-offset: 2px;
 }
 .frame-dot.active {
-  background: #00BCD4;
+  background: var(--bom-ui-accent-color, #F8FAFC);
   height: 5px;
-  box-shadow: 0 0 8px rgba(0, 188, 212, 0.5);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--bom-ui-accent-color, #F8FAFC) 50%, transparent);
 }
 .frame-dot.past {
-  background: rgba(0, 188, 212, 0.25);
+  background: color-mix(in srgb, var(--bom-ui-accent-color, #F8FAFC) 25%, transparent);
 }
 
 /* Time label */
 .time-label {
-  color: rgba(255, 255, 255, 0.6);
-  font-size: 11px;
+  color: rgba(255, 255, 255, 0.54);
+  font-size: 10px;
   font-weight: 500;
-  min-width: 40px;
+  min-width: 38px;
   text-align: right;
   font-variant-numeric: tabular-nums;
   flex-shrink: 0;
@@ -864,20 +931,20 @@ ha-card {
 /* Layer label */
 .layer-badge {
   position: absolute;
-  top: 10px;
-  left: 10px;
+  top: 8px;
+  left: 8px;
   z-index: 4;
-  padding: 4px 10px;
-  background: rgba(10, 10, 24, 0.7);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  padding: 3px 9px;
+  background: rgb(8 11 20 / calc(0.58 * var(--bom-chrome-opacity, 1)));
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
   border-radius: var(--bom-badge-radius);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  color: rgba(255, 255, 255, 0.55);
-  font-size: 10px;
+  border: 1px solid rgb(255 255 255 / calc(0.05 * var(--bom-chrome-opacity, 1)));
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 9px;
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.8px;
+  letter-spacing: 0.7px;
   pointer-events: none;
 }
 
@@ -891,9 +958,9 @@ ha-card {
   pointer-events: none;
 }
 .legend-scale {
-  height: 8px;
+  height: 6px;
   border-radius: 0;
-  box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.12);
+  box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.08);
 }
 
 /* Loading state */
@@ -919,8 +986,8 @@ ha-card {
 .spinner {
   width: 24px;
   height: 24px;
-  border: 2px solid rgba(0, 188, 212, 0.15);
-  border-top-color: #00BCD4;
+  border: 2px solid color-mix(in srgb, var(--bom-ui-accent-color, #F8FAFC) 15%, transparent);
+  border-top-color: var(--bom-ui-accent-color, #F8FAFC);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
@@ -950,10 +1017,10 @@ ha-card {
   transform: translate(-50%, -50%);
   width: 12px;
   height: 12px;
-  background: #00BCD4;
+  background: var(--bom-map-accent-color, var(--accent-color, #00BCD4));
   border: 2px solid rgba(255, 255, 255, 0.9);
   border-radius: 50%;
-  box-shadow: 0 0 10px rgba(0, 188, 212, 0.6), 0 0 20px rgba(0, 188, 212, 0.2);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--bom-map-accent-color, var(--accent-color, #00BCD4)) 60%, transparent), 0 0 20px color-mix(in srgb, var(--bom-map-accent-color, var(--accent-color, #00BCD4)) 20%, transparent);
 }
 .marker-dot::after {
   content: '';
@@ -963,7 +1030,7 @@ ha-card {
   transform: translate(-50%, -50%);
   width: 24px;
   height: 24px;
-  background: rgba(0, 188, 212, 0.15);
+  background: color-mix(in srgb, var(--bom-map-accent-color, var(--accent-color, #00BCD4)) 15%, transparent);
   border-radius: 50%;
   animation: pulse 2s ease-out infinite;
 }
@@ -1308,6 +1375,7 @@ class BomRadarCard extends HTMLElement {
     this._updateTimer = null;
     this._resizeObserver = null;
     this._layerSwitcher = null;
+    this._opacityControl = null;
     this._lastRadarDisplayZoom = null;
     this._pendingZoomRebuild = false;
     this._previousDisplayZoom = null;
@@ -1375,6 +1443,9 @@ class BomRadarCard extends HTMLElement {
       marker_latitude: config.marker_latitude,
       marker_longitude: config.marker_longitude,
       radar_opacity: Math.min(1, Math.max(0.1, config.radar_opacity || 0.7)),
+      chrome_opacity: Math.min(1, Math.max(0.2, config.chrome_opacity ?? 1)),
+      accent_color: sanitizeAccentColor(config.accent_color),
+      location_color: sanitizeAccentColor(config.location_color),
       allow_overzoom: allowOverzoom,
       max_display_zoom: maxDisplayZoom,
       card_mod: config.card_mod,
@@ -1414,7 +1485,7 @@ class BomRadarCard extends HTMLElement {
 
     this.shadowRoot.innerHTML = `
       <style>${LEAFLET_CSS}${CARD_CSS}</style>
-      <ha-card style="--bom-card-radius:${this._config.square_style ? '0px' : 'var(--ha-card-border-radius, 12px)'}">
+      <ha-card style="--bom-card-radius:${this._config.square_style ? '0px' : 'var(--ha-card-border-radius, 12px)'}; --bom-chrome-opacity:${this._config.chrome_opacity}; --bom-ui-accent-color:${this._config.accent_color || DEFAULT_UI_ACCENT_COLOR}; --bom-map-accent-color:${this._config.location_color || `var(--accent-color, ${DEFAULT_ACCENT_COLOR})`}">
         <div class="card-content${this._config.square_style ? ' is-square' : ''}">
           <div id="map" style="height: ${this._config.map_height}px"></div>
           <div class="loading-overlay" id="loading">
@@ -1425,6 +1496,13 @@ class BomRadarCard extends HTMLElement {
           <div class="controls">
             <button class="play-btn" id="play-btn" aria-label="Play/Pause">${ICON_PAUSE}</button>
             <div class="timeline" id="timeline"></div>
+            <div class="opacity-control" id="opacity-control">
+              <button class="opacity-btn" id="opacity-btn" aria-label="Adjust overlay opacity" aria-haspopup="true" aria-expanded="false">${ICON_OPACITY}</button>
+              <div class="opacity-panel" id="opacity-panel">
+                <input class="opacity-slider" id="opacity-slider" type="range" min="0.1" max="1" step="0.05" value="${this._config.radar_opacity}">
+                <span class="opacity-value" id="opacity-value">${Math.round(this._config.radar_opacity * 100)}%</span>
+              </div>
+            </div>
             <span class="time-label" id="time-label">--:--</span>
           </div>` : ''}
         </div>
@@ -1524,9 +1602,11 @@ class BomRadarCard extends HTMLElement {
 
     // Pause animation during map interaction
     this._map.on('movestart', () => {
+      this._setOpacityPanelOpen(false);
       if (this._playing) this._stopAnimation();
     });
     this._map.on('zoomstart', () => {
+      this._setOpacityPanelOpen(false);
       this._pendingZoomRebuild = true;
       this._previousDisplayZoom = this._lastRadarDisplayZoom ?? this._map?.getZoom() ?? this._config.zoom_level;
       if (this._playing) this._stopAnimation();
@@ -1767,7 +1847,41 @@ class BomRadarCard extends HTMLElement {
         }
       });
     }
+    const opacityBtn = this.shadowRoot.getElementById('opacity-btn');
+    const opacitySlider = this.shadowRoot.getElementById('opacity-slider');
+    if (opacityBtn && opacitySlider) {
+      const control = this.shadowRoot.getElementById('opacity-control');
+      this._opacityControl = control;
+      opacityBtn.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        this._setOpacityPanelOpen(!control.classList.contains('is-open'));
+      });
+      opacitySlider.addEventListener('input', (ev) => {
+        this._setRadarOpacity(parseFloat(ev.target.value));
+      });
+    }
     this._buildTimeline();
+  }
+
+  _setOpacityPanelOpen(isOpen) {
+    if (!this._opacityControl) return;
+    this._opacityControl.classList.toggle('is-open', isOpen);
+    const button = this.shadowRoot.getElementById('opacity-btn');
+    if (button) {
+      button.setAttribute('aria-expanded', String(isOpen));
+    }
+  }
+
+  _setRadarOpacity(value) {
+    const clamped = Math.min(1, Math.max(0.1, Number(value) || this._config.radar_opacity));
+    this._config.radar_opacity = clamped;
+    const opacityValue = this.shadowRoot.getElementById('opacity-value');
+    if (opacityValue) {
+      opacityValue.textContent = `${Math.round(clamped * 100)}%`;
+    }
+    for (let i = 0; i < this._radarLayers.length; i++) {
+      this._radarLayers[i].setOpacity(i === this._currentFrame ? clamped : 0);
+    }
   }
 
   _buildTimeline() {
@@ -1899,15 +2013,16 @@ class BomRadarCardEditor extends HTMLElement {
         label { display:block; font-size:12px; font-weight:500; margin-bottom:4px; color:var(--primary-text-color); }
         select,input[type="number"] { width:100%; padding:8px 10px; border:1px solid var(--divider-color); border-radius:10px; background:var(--card-background-color); color:var(--primary-text-color); font-size:14px; box-sizing:border-box; }
         input[type="password"] { width:100%; padding:8px 10px; border:1px solid var(--divider-color); border-radius:10px; background:var(--card-background-color); color:var(--primary-text-color); font-size:14px; box-sizing:border-box; }
-        select:focus-visible,input:focus-visible { outline:2px solid #00BCD4; outline-offset:1px; border-color:#00BCD4; }
+        input[type="color"] { width:100%; height:40px; padding:4px; border:1px solid var(--divider-color); border-radius:10px; background:var(--card-background-color); box-sizing:border-box; }
+        select:focus-visible,input:focus-visible { outline:2px solid var(--accent-color, #00BCD4); outline-offset:1px; border-color:var(--accent-color, #00BCD4); }
         .toggle-row { display:flex; align-items:center; justify-content:space-between; padding:4px 0; }
         .toggle-label { font-size:13px; color:var(--primary-text-color); }
         .toggle { position:relative; width:36px; height:20px; flex-shrink:0; }
         .toggle input { opacity:0; width:0; height:0; }
         .toggle-slider { position:absolute; cursor:pointer; inset:0; background:rgba(255,255,255,0.12); border-radius:10px; transition:background 0.2s; }
         .toggle-slider::before { position:absolute; content:''; height:16px; width:16px; left:2px; bottom:2px; background:#fff; border-radius:50%; transition:transform 0.2s; }
-        .toggle input:focus-visible+.toggle-slider { box-shadow:0 0 0 2px #00BCD4; }
-        .toggle input:checked+.toggle-slider { background:#00BCD4; }
+        .toggle input:focus-visible+.toggle-slider { box-shadow:0 0 0 2px var(--accent-color, #00BCD4); }
+        .toggle input:checked+.toggle-slider { background:var(--accent-color, #00BCD4); }
         .toggle input:checked+.toggle-slider::before { transform:translateX(16px); }
         .help-text { margin-top:6px; font-size:11px; line-height:1.4; color:var(--secondary-text-color); }
         .layer-list { max-height:320px; overflow:auto; padding:2px 2px 0; }
@@ -1934,10 +2049,30 @@ class BomRadarCardEditor extends HTMLElement {
               <input type="number" id="radar_opacity" min="0.1" max="1" step="0.1" value="${cfg.radar_opacity || 0.7}">
             </div>
             <div class="row">
+              <label>Chrome Opacity</label>
+              <input type="number" id="chrome_opacity" min="0.2" max="1" step="0.1" value="${cfg.chrome_opacity ?? 1}">
+            </div>
+            <div class="row">
               <label>Frames</label>
               <input type="number" id="frame_count" min="1" max="9" value="${cfg.frame_count || 9}">
             </div>
           </div>
+          ${this._toggle('use_custom_accent_color', 'Custom accent color', Boolean(cfg.accent_color))}
+          ${cfg.accent_color ? `
+            <div class="row">
+              <label>UI Accent Color</label>
+              <input type="color" id="accent_color" value="${cfg.accent_color || DEFAULT_UI_ACCENT_COLOR}">
+              <div class="help-text">Optional. Leave this off to use the card&apos;s neutral default UI accent.</div>
+            </div>
+          ` : ''}
+          ${this._toggle('use_custom_location_color', 'Custom GPS marker color', Boolean(cfg.location_color))}
+          ${cfg.location_color ? `
+            <div class="row">
+              <label>GPS Location Color</label>
+              <input type="color" id="location_color" value="${cfg.location_color || DEFAULT_ACCENT_COLOR}">
+              <div class="help-text">Optional. Leave this off to keep the marker tied to your Home Assistant accent color.</div>
+            </div>
+          ` : ''}
         </div>
 
         <div class="section">
@@ -2052,8 +2187,8 @@ class BomRadarCardEditor extends HTMLElement {
     const fields = [
       'layer', 'basemap_provider', 'basemap_style', 'basemap_api_key',
       'zoom_level', 'map_height', 'center_latitude', 'center_longitude',
-      'frame_delay', 'restart_delay', 'radar_opacity', 'frame_count',
-      'marker_latitude', 'marker_longitude',
+      'frame_delay', 'restart_delay', 'radar_opacity', 'chrome_opacity', 'frame_count',
+      'marker_latitude', 'marker_longitude', 'accent_color', 'location_color',
     ];
     fields.forEach(id => {
       const el = this.shadowRoot.getElementById(id);
@@ -2062,7 +2197,7 @@ class BomRadarCardEditor extends HTMLElement {
 
     const toggles = [
       'show_marker', 'show_zoom', 'show_recenter', 'show_layer_switcher', 'show_playback',
-      'show_legend', 'square_style', 'show_layer_label', 'show_attribution', 'allow_overzoom',
+      'show_legend', 'square_style', 'show_layer_label', 'show_attribution', 'allow_overzoom', 'use_custom_accent_color', 'use_custom_location_color',
     ];
     toggles.forEach(id => {
       const el = this.shadowRoot.getElementById(id);
@@ -2132,13 +2267,29 @@ class BomRadarCardEditor extends HTMLElement {
       }
     }
 
+    const useCustomAccent = get('use_custom_accent_color');
+    if (useCustomAccent?.checked) {
+      const accentColor = sanitizeAccentColor(get('accent_color')?.value);
+      config.accent_color = accentColor || DEFAULT_UI_ACCENT_COLOR;
+    } else {
+      delete config.accent_color;
+    }
+
+    const useCustomLocationColor = get('use_custom_location_color');
+    if (useCustomLocationColor?.checked) {
+      const locationColor = sanitizeAccentColor(get('location_color')?.value);
+      config.location_color = locationColor || DEFAULT_ACCENT_COLOR;
+    } else {
+      delete config.location_color;
+    }
+
 
     const numFields = {
       zoom_level: 'int', map_height: 'int', frame_delay: 'int',
       restart_delay: 'int', frame_count: 'int',
       center_latitude: 'float', center_longitude: 'float',
       marker_latitude: 'float', marker_longitude: 'float',
-      radar_opacity: 'float',
+      radar_opacity: 'float', chrome_opacity: 'float',
     };
 
     Object.entries(numFields).forEach(([id, type]) => {
