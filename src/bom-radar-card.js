@@ -675,7 +675,6 @@ const ICON_PLAY = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14
 const ICON_PAUSE = '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>';
 const ICON_RECENTER = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v3"/><path d="M12 19v3"/><path d="M2 12h3"/><path d="M19 12h3"/></svg>';
 const ICON_LAYERS = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4 4 8l8 4 8-4-8-4Z"/><path d="m4 12 8 4 8-4"/><path d="m4 16 8 4 8-4"/></svg>';
-const ICON_OPACITY = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3s6 6.4 6 10.1A6 6 0 0 1 6 13.1C6 9.4 12 3 12 3Z"/><path d="M9.2 14.8a3.3 3.3 0 0 0 5.6 0"/></svg>';
 
 // Leaflet CSS (minimal, inlined for Shadow DOM)
 const LEAFLET_CSS = `
@@ -719,9 +718,9 @@ const LEAFLET_CSS = `
 .bom-layer-button{appearance:none;-webkit-appearance:none;background-color:rgb(14 18 32 / calc(0.72 * var(--bom-chrome-opacity, 1)));backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);color:rgba(255,255,255,0.7);width:30px;height:30px;padding:0;display:flex;align-items:center;justify-content:center;border:none;border-radius:var(--bom-control-radius);cursor:pointer;box-shadow:0 1px 6px rgba(0,0,0,0.24);transition:background 0.15s,color 0.15s,opacity 0.15s}
 .bom-layer-button:hover,.bom-layer-button.is-open{background-color:rgb(18 24 42 / calc(0.84 * var(--bom-chrome-opacity, 1)));color:white}
 .bom-layer-button svg{width:16px;height:16px}
-.bom-layer-panel{position:absolute;top:0;right:38px;min-width:156px;padding:4px;display:none;flex-direction:column;gap:3px;background:rgb(8 11 20 / calc(0.86 * var(--bom-chrome-opacity, 1)));backdrop-filter:blur(12px) saturate(1.35);-webkit-backdrop-filter:blur(12px) saturate(1.35);border:1px solid rgb(255 255 255 / calc(0.06 * var(--bom-chrome-opacity, 1)));border-radius:var(--bom-control-radius);box-shadow:0 8px 22px rgba(0,0,0,0.28)}
+.bom-layer-panel{position:absolute;top:0;right:38px;width:192px;max-width:192px;padding:4px;display:none;flex-direction:column;gap:3px;background:rgb(8 11 20 / calc(0.86 * var(--bom-chrome-opacity, 1)));backdrop-filter:blur(12px) saturate(1.35);-webkit-backdrop-filter:blur(12px) saturate(1.35);border:1px solid rgb(255 255 255 / calc(0.06 * var(--bom-chrome-opacity, 1)));border-radius:var(--bom-control-radius);box-shadow:0 8px 22px rgba(0,0,0,0.28)}
 .bom-layer-panel.is-open{display:flex}
-.bom-layer-panel{max-height:min(70vh,520px);overflow:auto;overscroll-behavior:contain}
+.bom-layer-panel{max-height:var(--bom-layer-panel-max-height, min(70vh,520px));overflow:auto;overscroll-behavior:contain}
 .bom-layer-group{padding:8px 10px 4px;font-size:10px;font-weight:700;line-height:1;letter-spacing:0.1em;text-transform:uppercase;color:rgba(255,255,255,0.34)}
 .bom-layer-option{appearance:none;-webkit-appearance:none;width:100%;padding:8px 10px;border:none;border-radius:calc(var(--bom-control-radius) - 2px);background:transparent;color:rgba(255,255,255,0.68);cursor:pointer;text-align:left;transition:background 0.15s,color 0.15s}
 .bom-layer-option:hover,.bom-layer-option.is-active{background:rgb(255 255 255 / calc(0.08 * var(--bom-chrome-opacity, 1)));color:white}
@@ -817,64 +816,6 @@ ha-card {
 }
 .play-btn:active {
   transform: scale(0.92);
-}
-.opacity-control {
-  position: relative;
-  flex-shrink: 0;
-}
-.opacity-btn {
-  background: none;
-  border: none;
-  color: rgba(255, 255, 255, 0.62);
-  cursor: pointer;
-  padding: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  border-radius: var(--bom-control-radius);
-  transition: background 0.15s, color 0.15s;
-}
-.opacity-btn:hover,
-.opacity-control.is-open .opacity-btn {
-  background: rgb(255 255 255 / calc(0.08 * var(--bom-chrome-opacity, 1)));
-  color: rgba(255, 255, 255, 0.9);
-}
-.opacity-btn svg {
-  width: 14px;
-  height: 14px;
-}
-.opacity-panel {
-  position: absolute;
-  right: 0;
-  bottom: calc(100% + 8px);
-  display: none;
-  align-items: center;
-  gap: 8px;
-  min-width: 132px;
-  padding: 8px 10px;
-  background: rgb(8 11 20 / calc(0.86 * var(--bom-chrome-opacity, 1)));
-  backdrop-filter: blur(12px) saturate(1.35);
-  -webkit-backdrop-filter: blur(12px) saturate(1.35);
-  border: 1px solid rgb(255 255 255 / calc(0.06 * var(--bom-chrome-opacity, 1)));
-  border-radius: 10px;
-  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.28);
-}
-.opacity-control.is-open .opacity-panel {
-  display: flex;
-}
-.opacity-slider {
-  width: 84px;
-  accent-color: var(--bom-ui-accent-color, #F8FAFC);
-}
-.opacity-value {
-  min-width: 34px;
-  color: rgba(255, 255, 255, 0.58);
-  font-size: 10px;
-  font-weight: 600;
-  text-align: right;
-  font-variant-numeric: tabular-nums;
 }
 
 /* Timeline */
@@ -1375,7 +1316,6 @@ class BomRadarCard extends HTMLElement {
     this._updateTimer = null;
     this._resizeObserver = null;
     this._layerSwitcher = null;
-    this._opacityControl = null;
     this._lastRadarDisplayZoom = null;
     this._pendingZoomRebuild = false;
     this._previousDisplayZoom = null;
@@ -1496,13 +1436,6 @@ class BomRadarCard extends HTMLElement {
           <div class="controls">
             <button class="play-btn" id="play-btn" aria-label="Play/Pause">${ICON_PAUSE}</button>
             <div class="timeline" id="timeline"></div>
-            <div class="opacity-control" id="opacity-control">
-              <button class="opacity-btn" id="opacity-btn" aria-label="Adjust overlay opacity" aria-haspopup="true" aria-expanded="false">${ICON_OPACITY}</button>
-              <div class="opacity-panel" id="opacity-panel">
-                <input class="opacity-slider" id="opacity-slider" type="range" min="0.1" max="1" step="0.05" value="${this._config.radar_opacity}">
-                <span class="opacity-value" id="opacity-value">${Math.round(this._config.radar_opacity * 100)}%</span>
-              </div>
-            </div>
             <span class="time-label" id="time-label">--:--</span>
           </div>` : ''}
         </div>
@@ -1602,11 +1535,9 @@ class BomRadarCard extends HTMLElement {
 
     // Pause animation during map interaction
     this._map.on('movestart', () => {
-      this._setOpacityPanelOpen(false);
       if (this._playing) this._stopAnimation();
     });
     this._map.on('zoomstart', () => {
-      this._setOpacityPanelOpen(false);
       this._pendingZoomRebuild = true;
       this._previousDisplayZoom = this._lastRadarDisplayZoom ?? this._map?.getZoom() ?? this._config.zoom_level;
       if (this._playing) this._stopAnimation();
@@ -1632,7 +1563,10 @@ class BomRadarCard extends HTMLElement {
     });
 
     // Handle resize
-    this._resizeObserver = new ResizeObserver(() => this._map?.invalidateSize());
+    this._resizeObserver = new ResizeObserver(() => {
+      this._map?.invalidateSize();
+      this._fitLayerSwitcherPanel();
+    });
     this._resizeObserver.observe(container);
   }
 
@@ -1697,6 +1631,9 @@ class BomRadarCard extends HTMLElement {
         panel.classList.toggle('is-open', isOpen);
         button.classList.toggle('is-open', isOpen);
         button.setAttribute('aria-expanded', String(isOpen));
+        if (isOpen) {
+          this._fitLayerSwitcherPanel();
+        }
       };
 
       L.DomEvent.disableClickPropagation(container);
@@ -1737,6 +1674,24 @@ class BomRadarCard extends HTMLElement {
     this._layerSwitcher.panel.classList.remove('is-open');
     this._layerSwitcher.button.classList.remove('is-open');
     this._layerSwitcher.button.setAttribute('aria-expanded', 'false');
+    this._layerSwitcher.panel.style.removeProperty('max-height');
+    this._layerSwitcher.panel.style.removeProperty('max-width');
+  }
+
+  _fitLayerSwitcherPanel() {
+    if (!this._layerSwitcher?.panel?.classList.contains('is-open')) return;
+
+    const content = this.shadowRoot.querySelector('.card-content');
+    const { panel } = this._layerSwitcher;
+    if (!content || !panel) return;
+
+    const contentRect = content.getBoundingClientRect();
+    const panelRect = panel.getBoundingClientRect();
+    const availableHeight = Math.max(160, Math.floor(contentRect.bottom - panelRect.top - 8));
+    const availableWidth = Math.max(156, Math.min(210, Math.floor(contentRect.width - 52)));
+
+    panel.style.maxHeight = `${availableHeight}px`;
+    panel.style.maxWidth = `${availableWidth}px`;
   }
 
   _syncLayerSwitcherState() {
@@ -1847,41 +1802,7 @@ class BomRadarCard extends HTMLElement {
         }
       });
     }
-    const opacityBtn = this.shadowRoot.getElementById('opacity-btn');
-    const opacitySlider = this.shadowRoot.getElementById('opacity-slider');
-    if (opacityBtn && opacitySlider) {
-      const control = this.shadowRoot.getElementById('opacity-control');
-      this._opacityControl = control;
-      opacityBtn.addEventListener('click', (ev) => {
-        ev.stopPropagation();
-        this._setOpacityPanelOpen(!control.classList.contains('is-open'));
-      });
-      opacitySlider.addEventListener('input', (ev) => {
-        this._setRadarOpacity(parseFloat(ev.target.value));
-      });
-    }
     this._buildTimeline();
-  }
-
-  _setOpacityPanelOpen(isOpen) {
-    if (!this._opacityControl) return;
-    this._opacityControl.classList.toggle('is-open', isOpen);
-    const button = this.shadowRoot.getElementById('opacity-btn');
-    if (button) {
-      button.setAttribute('aria-expanded', String(isOpen));
-    }
-  }
-
-  _setRadarOpacity(value) {
-    const clamped = Math.min(1, Math.max(0.1, Number(value) || this._config.radar_opacity));
-    this._config.radar_opacity = clamped;
-    const opacityValue = this.shadowRoot.getElementById('opacity-value');
-    if (opacityValue) {
-      opacityValue.textContent = `${Math.round(clamped * 100)}%`;
-    }
-    for (let i = 0; i < this._radarLayers.length; i++) {
-      this._radarLayers[i].setOpacity(i === this._currentFrame ? clamped : 0);
-    }
   }
 
   _buildTimeline() {
@@ -2114,7 +2035,7 @@ class BomRadarCardEditor extends HTMLElement {
           <div class="row">
             <label>Basemap API Key (Optional)</label>
             <input type="password" id="basemap_api_key" value="${cfg.basemap_api_key || ''}" autocomplete="off">
-            <div class="help-text">Not needed for CARTO. Stadia Maps and Esri may require a key depending on the selected style and how your Home Assistant instance is hosted. See the README for provider setup links.</div>
+            <div class="help-text">Not needed for CARTO. Stadia Maps and Esri may require a key depending on the selected style and how your Home Assistant instance is hosted. See the <a href="https://github.com/AshtonAU/bom-radar-card#getting-basemap-provider-keys" target="_blank" rel="noreferrer">README provider-key guide</a>.</div>
           </div>
           <div class="row-inline">
             <div class="row">

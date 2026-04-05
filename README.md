@@ -155,15 +155,47 @@ Important notes:
 - `localhost` testing is not the same thing as a normal Home Assistant install on a LAN hostname or IP. A provider that appears keyless in local testing may still require a key for real users.
 - Stadia Maps authentication requirements vary by host setup, and some styles may be plan-dependent.
 - Esri also has an authenticated API-key path for their modern basemap services, even if some legacy tile endpoints appear to work anonymously.
+- If Stadia styles fail with an auth or tile-loading error in Home Assistant, the first thing to try is adding a real key or configuring Stadia domain auth for your HA URL.
 
-Provider setup:
+### Getting Basemap Provider Keys
 
-- Stadia Maps: create an account and API key from the official docs and dashboard
-  - [Authentication docs](https://docs.stadiamaps.com/authentication/)
-  - [Pricing](https://stadiamaps.com/pricing/)
-- Esri / ArcGIS: create an ArcGIS Location Platform account and API key
-  - [API keys and security](https://developers.arcgis.com/documentation/security-and-authentication/api-key-authentication/)
-  - [Basemap Styles service](https://developers.arcgis.com/rest/basemap-styles/)
+`carto` does not need a key.
+
+For `stadia` and `esri`, the card uses the single `basemap_api_key` field. Only the currently selected provider uses that key.
+
+#### Stadia Maps
+
+Use this if the Stadia styles error in Home Assistant, or if your card is being served from a LAN IP / hostname / domain instead of `localhost`.
+
+1. Create a free Stadia Maps account.
+2. Open the Stadia client dashboard and select the property/site you want to use.
+3. Under authentication settings, either:
+   - generate an API key, or
+   - configure domain-based authentication for your Home Assistant URL
+4. Paste the API key into `basemap_api_key` if you are using key auth.
+
+Helpful links:
+
+- [Authentication docs](https://docs.stadiamaps.com/authentication/)
+- [Client dashboard](https://client.stadiamaps.com/)
+- [Pricing](https://stadiamaps.com/pricing/)
+
+#### Esri / ArcGIS
+
+Use this if you want the Esri styles to work consistently with an authenticated setup.
+
+1. Create an ArcGIS Location Platform or ArcGIS Online account.
+2. Create API key credentials using Esri's current API key flow.
+3. Generate an API key with basemap access.
+4. Paste that API key into `basemap_api_key`.
+
+Helpful links:
+
+- [API keys and security](https://developers.arcgis.com/documentation/security-and-authentication/api-key-authentication/)
+- [Create an API key tutorial](https://developers.arcgis.com/documentation/security-and-authentication/api-key-authentication/tutorials/create-an-api-key/online/)
+- [Basemap Styles service](https://developers.arcgis.com/rest/basemap-styles/)
+
+Note: Esri legacy API keys are being retired, so use the current API key credentials flow rather than older legacy-key docs.
 
 ### UI Polish And Accent Controls
 
