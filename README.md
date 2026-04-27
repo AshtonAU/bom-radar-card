@@ -40,13 +40,14 @@ If the card saves you time and you want to support ongoing maintenance, you can 
 
 ## How It Works
 
-The card reads BOM's published WMTS time dimension and loads 256x256 PNG tiles as map overlays. The basemap is split into base tiles underneath the weather overlay and labels above it so suburb and city names stay readable.
+The card uses BOM's WMTS time-series tile service and loads 256x256 PNG tiles as map overlays. It first tries BOM's published WMTS time dimension, then falls back to per-layer generated timestamps if the capabilities response is unavailable, stale, or slow. The basemap is split into base tiles underneath the weather overlay and labels above it so suburb and city names stay readable.
 
 **Data flow:**
-1. Read the latest published timestamps from BOM's WMTS capabilities
-2. Load PNG tiles for each timestamp at the current map view
-3. Animate through frames using the built-in playback controls
-4. Auto-refresh periodically so the card stays aligned with BOM updates
+1. Try to read recent published timestamps from BOM's WMTS capabilities
+2. Reject stale or stalled capability data and generate current layer timestamps when needed
+3. Load PNG tiles for each selected timestamp at the current map view
+4. Animate through frames using the built-in playback controls
+5. Auto-refresh periodically so the card stays aligned with BOM updates
 
 ## Installation
 
@@ -258,7 +259,7 @@ enabled_layers:
 
 `show_legend` currently applies to the rain rate and reflectivity layers, where BOM exposes a qualitative rain-intensity legend. Forecast, accumulation, wind, waves, temperature, humidity, UV, and significant-weather layers still render without an inline legend for now.
 
-Observed radar layers animate backward through the latest published past timestamps. Forecast and daily layers start from the earliest available current/forward timestamp and advance through BOM's published forecast horizon.
+Observed radar layers animate backward through recent past timestamps. Forecast and daily layers start from the earliest available current/forward timestamp and advance through BOM's forecast horizon.
 
 All of the card chrome is optional, so you can keep the full interactive layout or strip it back to a much cleaner map by disabling things like the layer switcher, layer badge, zoom controls, recenter button, playback bar, and attribution.
 
@@ -280,7 +281,7 @@ The popular `weather-radar-card` uses RainViewer, which reprocesses BOM data and
 - **Map library**: Leaflet.js 1.9.4 (loaded from CDN)
 - **Basemap**: CARTO Dark Matter / Voyager split into base and labels layers
 - **Update cycle**: 5 minutes
-- **Bundle size**: ~25KB minified
+- **Bundle size**: ~60KB minified
 
 ## Credits
 
