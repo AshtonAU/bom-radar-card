@@ -6,7 +6,7 @@
  * License: MIT
  */
 
-const CARD_VERSION = '1.6.3';
+const CARD_VERSION = '1.6.4';
 const DEFAULT_ACCENT_COLOR = '#00BCD4';
 const DEFAULT_UI_ACCENT_COLOR = '#F8FAFC';
 
@@ -19,6 +19,7 @@ console.info(
 // BOM WMTS Configuration
 const BOM_WMTS_BASE = 'https://api.bom.gov.au/apikey/v1/mapping/timeseries/wmts';
 const BOM_WMTS_CAPABILITIES_URL = `${BOM_WMTS_BASE}?SERVICE=WMTS&REQUEST=GetCapabilities&VERSION=1.0.0`;
+const BOM_WMTS_CAPABILITIES_TIMEOUT_MS = 5000;
 
 // Available public BOM WMTS layers.
 // Keep this registry explicit so each layer can define its own matrix set,
@@ -81,7 +82,7 @@ const BOM_LAYERS = {
     legendType: 'rainRadar',
     timeMode: 'past',
     fallbackStepMinutes: 5,
-    fallbackLagMinutes: 5,
+    fallbackLagMinutes: 10,
     initialFrame: 'latest',
   },
   'forecast_rain_50pct_3hr': {
@@ -1038,14 +1039,14 @@ function loadLeaflet() {
   return leafletLoadPromise;
 }
 
-function getRoundedUtcDate(baseDate, stepMinutes, anchorHourUtc = null) {
+function getRoundedUtcDate(baseDate, stepMinutes, anchorHourUtc = null, allowFutureDailyAnchor = false) {
   const rounded = new Date(baseDate);
   rounded.setUTCSeconds(0, 0);
 
   if (stepMinutes >= 1440) {
     rounded.setUTCMinutes(0, 0, 0);
     rounded.setUTCHours(anchorHourUtc ?? 0);
-    if (rounded > baseDate) {
+    if (!allowFutureDailyAnchor && rounded > baseDate) {
       rounded.setUTCDate(rounded.getUTCDate() - 1);
     }
     return rounded;
@@ -1064,7 +1065,13 @@ function generateFallbackTimestamps(layerConfig, count = 9) {
   const anchorHourUtc = layerConfig?.fallbackAnchorHourUtc ?? null;
   const frameCount = Math.min(count, layerConfig?.fallbackMaxFrames || count);
   const timeMode = layerConfig?.timeMode || 'past';
-  const start = getRoundedUtcDate(new Date(now.getTime() - lagMinutes * 60 * 1000), stepMinutes, anchorHourUtc);
+  const allowFutureDailyAnchor = timeMode === 'forecast' && stepMinutes >= 1440;
+  const start = getRoundedUtcDate(
+    new Date(now.getTime() - lagMinutes * 60 * 1000),
+    stepMinutes,
+    anchorHourUtc,
+    allowFutureDailyAnchor,
+  );
 
   const timestamps = [];
   for (let i = 0; i < frameCount; i++) {
@@ -1094,21 +1101,43 @@ async function loadBomCapabilities() {
     return capabilitiesLoadPromise;
   }
 
-  capabilitiesLoadPromise = fetch(BOM_WMTS_CAPABILITIES_URL, { mode: 'cors' })
-    .then(async (response) => {
-      if (!response.ok) {
-        throw new Error(`Capabilities request failed with ${response.status}`);
-      }
-      const xmlText = await response.text();
-      const xml = new DOMParser().parseFromString(xmlText, 'application/xml');
-      if (xml.querySelector('parsererror')) {
-        throw new Error('Capabilities response could not be parsed');
-      }
+  capabilitiesLoadPromise = (async () => {
+    const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    let timeoutId = null;
+
+    try {
+      const timeoutPromise = new Promise((_, reject) => {
+        timeoutId = setTimeout(() => {
+          controller?.abort();
+          reject(new Error('Capabilities request timed out'));
+        }, BOM_WMTS_CAPABILITIES_TIMEOUT_MS);
+      });
+      const requestPromise = (async () => {
+        const response = await fetch(BOM_WMTS_CAPABILITIES_URL, {
+          mode: 'cors',
+          ...(controller ? { signal: controller.signal } : {}),
+        });
+        if (!response.ok) {
+          throw new Error(`Capabilities request failed with ${response.status}`);
+        }
+        const xmlText = await response.text();
+        const xml = new DOMParser().parseFromString(xmlText, 'application/xml');
+        if (xml.querySelector('parsererror')) {
+          throw new Error('Capabilities response could not be parsed');
+        }
+        return xml;
+      });
+      const xml = await Promise.race([requestPromise, timeoutPromise]);
       capabilitiesCache = xml;
       capabilitiesFetchedAt = Date.now();
       capabilitiesLoadPromise = null;
       return xml;
-    })
+    } finally {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+    }
+  })()
     .catch((err) => {
       capabilitiesLoadPromise = null;
       throw err;
@@ -1167,16 +1196,13 @@ function hasFreshPublishedTimestamps(layerConfig, publishedTimes) {
   const timeMode = layerConfig?.timeMode || 'past';
   const stepMinutes = layerConfig?.fallbackStepMinutes || 5;
 
-  if (timeMode !== 'past' || stepMinutes >= 1440) {
-    return true;
-  }
-
   const latestTimeMs = new Date(publishedTimes[publishedTimes.length - 1]).getTime();
   if (!Number.isFinite(latestTimeMs)) {
     return false;
   }
 
-  const maxAgeMs = Math.max(45, stepMinutes * 3) * 60 * 1000;
+  const minFreshnessMinutes = timeMode === 'forecast' ? 360 : 45;
+  const maxAgeMs = Math.max(minFreshnessMinutes, stepMinutes * 2) * 60 * 1000;
   return latestTimeMs >= Date.now() - maxAgeMs;
 }
 
