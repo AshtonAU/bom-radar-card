@@ -670,6 +670,15 @@ function sanitizeAccentColor(value) {
   return /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(trimmed) ? trimmed : undefined;
 }
 
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 // SVG icons
 const ICON_PLAY = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>';
 const ICON_PAUSE = '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>';
@@ -1445,7 +1454,12 @@ class BomRadarCard extends HTMLElement {
     try {
       this._renderTopOverlays();
       this._L = await loadLeaflet();
+      if (!this.isConnected) return;
       await this._initMap(this._L);
+      if (!this.isConnected) {
+        this._cleanupMap();
+        return;
+      }
       // Fade out loading overlay
       const loading = this.shadowRoot.getElementById('loading');
       if (loading) {
@@ -1506,6 +1520,7 @@ class BomRadarCard extends HTMLElement {
 
     // Load radar data (middle layer)
     await this._loadRadarData(L);
+    if (!this.isConnected || !this._map) return;
 
     // Labels on top of radar
     if (basemapConfig.labelsUrl) {
@@ -1730,7 +1745,7 @@ class BomRadarCard extends HTMLElement {
     const layerConfig = BOM_LAYERS[this._config.layer] || BOM_LAYERS.reflectivity;
     const timestamps = await getLayerTimestamps(layerConfig, this._config.frame_count);
 
-    if (!timestamps.length) return;
+    if (!this.isConnected || !this._map || !timestamps.length) return;
 
     this._timestamps = timestamps;
     this._currentFrame = layerConfig.initialFrame === 'first' ? 0 : this._timestamps.length - 1;
@@ -1878,7 +1893,7 @@ class BomRadarCard extends HTMLElement {
     }
   }
 
-  disconnectedCallback() {
+  _cleanupMap() {
     this._stopAnimation();
     this._closeLayerSwitcher();
     if (this._updateTimer) {
@@ -1894,6 +1909,10 @@ class BomRadarCard extends HTMLElement {
       this._map = null;
     }
     this._layerSwitcher = null;
+  }
+
+  disconnectedCallback() {
+    this._cleanupMap();
     this._initialized = false;
   }
 }
@@ -1967,22 +1986,22 @@ class BomRadarCardEditor extends HTMLElement {
           <div class="row-inline">
             <div class="row">
               <label>Overlay Opacity</label>
-              <input type="number" id="radar_opacity" min="0.1" max="1" step="0.1" value="${cfg.radar_opacity || 0.7}">
+              <input type="number" id="radar_opacity" min="0.1" max="1" step="0.1" value="${escapeHtml(cfg.radar_opacity || 0.7)}">
             </div>
             <div class="row">
               <label>Chrome Opacity</label>
-              <input type="number" id="chrome_opacity" min="0.2" max="1" step="0.1" value="${cfg.chrome_opacity ?? 1}">
+              <input type="number" id="chrome_opacity" min="0.2" max="1" step="0.1" value="${escapeHtml(cfg.chrome_opacity ?? 1)}">
             </div>
             <div class="row">
               <label>Frames</label>
-              <input type="number" id="frame_count" min="1" max="9" value="${cfg.frame_count || 9}">
+              <input type="number" id="frame_count" min="1" max="9" value="${escapeHtml(cfg.frame_count || 9)}">
             </div>
           </div>
           ${this._toggle('use_custom_accent_color', 'Custom accent color', Boolean(cfg.accent_color))}
           ${cfg.accent_color ? `
             <div class="row">
               <label>UI Accent Color</label>
-              <input type="color" id="accent_color" value="${cfg.accent_color || DEFAULT_UI_ACCENT_COLOR}">
+              <input type="color" id="accent_color" value="${escapeHtml(cfg.accent_color || DEFAULT_UI_ACCENT_COLOR)}">
               <div class="help-text">Optional. Leave this off to use the card&apos;s neutral default UI accent.</div>
             </div>
           ` : ''}
@@ -1990,7 +2009,7 @@ class BomRadarCardEditor extends HTMLElement {
           ${cfg.location_color ? `
             <div class="row">
               <label>GPS Location Color</label>
-              <input type="color" id="location_color" value="${cfg.location_color || DEFAULT_ACCENT_COLOR}">
+              <input type="color" id="location_color" value="${escapeHtml(cfg.location_color || DEFAULT_ACCENT_COLOR)}">
               <div class="help-text">Optional. Leave this off to keep the marker tied to your Home Assistant accent color.</div>
             </div>
           ` : ''}
@@ -2034,17 +2053,17 @@ class BomRadarCardEditor extends HTMLElement {
           </div>
           <div class="row">
             <label>Basemap API Key (Optional)</label>
-            <input type="password" id="basemap_api_key" value="${cfg.basemap_api_key || ''}" autocomplete="off">
+            <input type="password" id="basemap_api_key" value="${escapeHtml(cfg.basemap_api_key || '')}" autocomplete="off">
             <div class="help-text">Not needed for CARTO. Stadia Maps and Esri may require a key depending on the selected style and how your Home Assistant instance is hosted. See the <a href="https://github.com/AshtonAU/bom-radar-card#getting-basemap-provider-keys" target="_blank" rel="noreferrer">README provider-key guide</a>.</div>
           </div>
           <div class="row-inline">
             <div class="row">
               <label>Zoom (3-${cfg.allow_overzoom === true ? MAX_OVERZOOM_DISPLAY_ZOOM : MAX_DISPLAY_ZOOM})</label>
-              <input type="number" id="zoom_level" min="3" max="${cfg.allow_overzoom === true ? MAX_OVERZOOM_DISPLAY_ZOOM : MAX_DISPLAY_ZOOM}" value="${cfg.zoom_level || 7}">
+              <input type="number" id="zoom_level" min="3" max="${cfg.allow_overzoom === true ? MAX_OVERZOOM_DISPLAY_ZOOM : MAX_DISPLAY_ZOOM}" value="${escapeHtml(cfg.zoom_level || 7)}">
             </div>
             <div class="row">
               <label>Height (px)</label>
-              <input type="number" id="map_height" min="150" max="800" value="${cfg.map_height || 300}">
+              <input type="number" id="map_height" min="150" max="800" value="${escapeHtml(cfg.map_height || 300)}">
             </div>
           </div>
           ${this._toggle('allow_overzoom', 'Allow overzoom (Experimental)', cfg.allow_overzoom === true)}
@@ -2052,11 +2071,11 @@ class BomRadarCardEditor extends HTMLElement {
           <div class="row-inline">
             <div class="row">
               <label>Center Lat</label>
-              <input type="number" id="center_latitude" step="0.01" value="${cfg.center_latitude ?? ''}">
+              <input type="number" id="center_latitude" step="0.01" value="${escapeHtml(cfg.center_latitude ?? '')}">
             </div>
             <div class="row">
               <label>Center Lon</label>
-              <input type="number" id="center_longitude" step="0.01" value="${cfg.center_longitude ?? ''}">
+              <input type="number" id="center_longitude" step="0.01" value="${escapeHtml(cfg.center_longitude ?? '')}">
             </div>
           </div>
         </div>
@@ -2066,11 +2085,11 @@ class BomRadarCardEditor extends HTMLElement {
           <div class="row-inline">
             <div class="row">
               <label>Frame Delay (ms)</label>
-              <input type="number" id="frame_delay" min="100" max="2000" step="50" value="${cfg.frame_delay || 500}">
+              <input type="number" id="frame_delay" min="100" max="2000" step="50" value="${escapeHtml(cfg.frame_delay || 500)}">
             </div>
             <div class="row">
               <label>Loop Pause (ms)</label>
-              <input type="number" id="restart_delay" min="500" max="5000" step="100" value="${cfg.restart_delay || 1500}">
+              <input type="number" id="restart_delay" min="500" max="5000" step="100" value="${escapeHtml(cfg.restart_delay || 1500)}">
             </div>
           </div>
         </div>
@@ -2093,11 +2112,11 @@ class BomRadarCardEditor extends HTMLElement {
           <div class="row-inline">
             <div class="row">
               <label>Marker Lat</label>
-              <input type="number" id="marker_latitude" step="0.01" value="${cfg.marker_latitude ?? ''}">
+              <input type="number" id="marker_latitude" step="0.01" value="${escapeHtml(cfg.marker_latitude ?? '')}">
             </div>
             <div class="row">
               <label>Marker Lon</label>
-              <input type="number" id="marker_longitude" step="0.01" value="${cfg.marker_longitude ?? ''}">
+              <input type="number" id="marker_longitude" step="0.01" value="${escapeHtml(cfg.marker_longitude ?? '')}">
             </div>
           </div>
         </div>
