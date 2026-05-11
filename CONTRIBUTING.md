@@ -32,7 +32,6 @@ If you want to send a PR:
 - avoid unrelated refactors in the same PR
 - discuss larger changes in an issue or discussion first
 - update docs when the config surface or behavior changes
-- run `npm test` before opening the PR
 - run `npm run build` before opening the PR
 
 PRs that are easiest to review usually:

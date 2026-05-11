@@ -5,8 +5,7 @@
   "main": "dist/bom-radar-card.js",
   "scripts": {
     "build": "rollup -c",
-    "dev": "rollup -c -w",
-    "test": "node --test"
+    "dev": "rollup -c -w"
   },
   "repository": {
     "type": "git",

@@ -11,18 +11,16 @@
 - Re-invalidated Leaflet size after attach and resize so maps recover correctly in Home Assistant sections views and hidden-to-visible dashboard layouts.
 - Guarded BOM tile fallback completion so tile error fallback cannot call Leaflet's tile completion callback more than once.
 
-### Testing
+### Verification Notes
 
-- Added Node regression tests for detached config/state setup, connected-first setup, SPA detach/reconnect, stale async initialization, stale radar data loading, partial map cleanup, and BOM tile fallback completion.
-- Added browser harnesses for deterministic lifecycle testing and live visual testing with real Leaflet, CARTO basemap tiles, and BOM WMTS tile requests.
-- CI now runs `npm test` before the build and verifies the committed bundle remains current.
+- Verified with local Node regression checks for detached config/state setup, connected-first setup, SPA detach/reconnect, stale async initialization, stale radar data loading, partial map cleanup, and BOM tile fallback completion.
+- Verified with browser lifecycle and live visual harnesses using real Leaflet, CARTO basemap tiles, and BOM WMTS tile requests.
+- CI verifies the production bundle builds and committed `dist/bom-radar-card.js` remains current.
 
 ### Verified
 
-- `npm test`
 - `npm run build`
 - `node --check src/bom-radar-card.js`
-- `node --check test/bom-radar-card-lifecycle.test.mjs`
 - `git diff --check`
 - `npm audit --omit=dev`
 - `npm ci --dry-run`
