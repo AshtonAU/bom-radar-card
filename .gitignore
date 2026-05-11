@@ -1,2 +1,8 @@
 node_modules/
 .DS_Store
+
+# Local agent/workspace files
+AGENTS.md
+
+# Local verification harnesses
+test/
