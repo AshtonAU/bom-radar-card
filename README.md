@@ -11,7 +11,7 @@ This card exists as a modern replacement for older Home Assistant BOM radar card
 [![GitHub Sponsors](https://img.shields.io/badge/Sponsor-GitHub%20Sponsors-ea4aaa?logo=githubsponsors&logoColor=white)](https://github.com/sponsors/AshtonAU)
 [![Buy Me a Coffee](https://img.shields.io/badge/Support-Buy%20Me%20a%20Coffee-FFDD00?logo=buymeacoffee&logoColor=000000)](https://buymeacoffee.com/ashtonau)
 
-Current release: **v1.6.4**
+Current release: **v1.6.5**
 
 > [!IMPORTANT]
 > If you previously installed another BOM radar card, remove its HACS entry and dashboard resource before adding this one. Home Assistant can keep multiple similarly named Lovelace resources loaded at the same time, which can cause broken or unpredictable behaviour. After switching cards, do a hard refresh / clear browser cache so the new resource is actually loaded.
@@ -22,6 +22,12 @@ Current release: **v1.6.4**
 - Use [GitHub Issues](https://github.com/AshtonAU/bom-radar-card/issues) for reproducible bugs and concrete feature requests.
 - See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution/reporting guidance.
 - See [SECURITY.md](SECURITY.md) before posting anything sensitive publicly.
+
+## Latest Fixes
+
+`v1.6.5` fixes a Home Assistant sidebar navigation lifecycle regression introduced in `v1.6.3` and present in `v1.6.4`. In affected dashboards, the card could draw its shell and controls but remain stuck loading after navigating away and back through Home Assistant's SPA sidebar.
+
+The card now waits until it is connected, configured, and has Home Assistant state before initializing Leaflet. It also ignores stale async initialization work after disconnect/reconnect, cleans up partial maps, and invalidates the Leaflet map size after attach and resize. See [CHANGELOG.md](CHANGELOG.md) for release notes.
 
 ## Support The Project
 
@@ -61,7 +67,7 @@ The card uses BOM's WMTS time-series tile service and loads 256x256 PNG tiles as
 
 ### Manual
 
-1. Download `bom-radar-card.js` from the [latest release](https://github.com/AshtonAU/bom-radar-card/releases) (`v1.6.4` at the time of writing)
+1. Download `bom-radar-card.js` from the [latest release](https://github.com/AshtonAU/bom-radar-card/releases) (`v1.6.5` at the time of writing)
 2. Copy to `/config/www/bom-radar-card/bom-radar-card.js`
 3. Add resource: **Settings → Dashboards → Resources → Add** `/local/bom-radar-card/bom-radar-card.js` (JavaScript Module)
 

@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>BOM Radar Card Browser Harness</title>
+    <style>
+      body {
+        margin: 24px;
+        font-family: system-ui, sans-serif;
+        background: #111827;
+        color: #e5e7eb;
+      }
+      #status {
+        font-weight: 700;
+        margin-bottom: 12px;
+      }
+      #purpose {
+        color: #cbd5e1;
+        margin-bottom: 12px;
+      }
+      #results {
+        white-space: pre-wrap;
+        background: #020617;
+        border: 1px solid #334155;
+        border-radius: 8px;
+        padding: 12px;
+      }
+      #root {
+        max-width: 760px;
+        margin-top: 16px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="status">Running</div>
+    <div id="purpose">Automated lifecycle harness. This page uses a fake map and intentionally does not render real map tiles.</div>
+    <pre id="results"></pre>
+    <main id="root"></main>
+
+    <script>
+      window.fetch = async () => {
+        throw new Error('offline in browser harness');
+      };
+
+      class FakeMap {
+        constructor(container, options) {
+          this.container = container;
+          this.options = options;
+          this.layers = [];
+          this.controls = [];
+          this.events = {};
+          this.invalidateSizeCalls = 0;
+          this.attributionControl = { setPrefix: () => {} };
+        }
+        getZoom() { return this.options.zoom; }
+        on(events, listener) {
+          events.split(/\s+/).forEach((eventName) => {
+            this.events[eventName] = this.events[eventName] || [];
+            this.events[eventName].push(listener);
+          });
+          return this;
+        }
+        hasLayer(layer) { return this.layers.includes(layer); }
+        removeLayer(layer) { this.layers = this.layers.filter((existing) => existing !== layer); }
+        remove() {
+          this.removed = true;
+          this.layers = [];
+        }
+        invalidateSize() { this.invalidateSizeCalls += 1; }
+        panTo() {}
+      }
+
+      class FakeTileLayer {
+        constructor(url = '', options = {}) {
+          this.url = url;
+          this.options = options;
+          this.opacity = options.opacity ?? 1;
+        }
+        addTo(map) {
+          this._map = map;
+          map.layers.push(this);
+          return this;
+        }
+        setOpacity(opacity) {
+          this.opacity = opacity;
+        }
+      }
+
+      function control() {
+        return {
+          addTo(map) {
+            this._container = this.onAdd ? this.onAdd(map) : null;
+            map.controls.push(this);
+            return this;
+          },
+        };
+      }
+      control.zoom = () => ({
+        addTo(map) {
+          map.controls.push(this);
+          return this;
+        },
+      });
+
+      window.L = {
+        map: (container, options) => new FakeMap(container, options),
+        tileLayer: (url, options) => new FakeTileLayer(url, options),
+        TileLayer: {
+          extend(proto) {
+            class ExtendedTileLayer extends FakeTileLayer {}
+            Object.assign(ExtendedTileLayer.prototype, proto);
+            return ExtendedTileLayer;
+          },
+        },
+        control,
+        marker: () => ({
+          addTo: (map) => {
+            map.layers.push({ type: 'marker' });
+          },
+        }),
+        divIcon: (options) => options,
+        DomUtil: {
+          create(tagName, className, parent) {
+            const element = document.createElement(tagName);
+            element.className = className || '';
+            if (parent) parent.appendChild(element);
+            return element;
+          },
+        },
+        DomEvent: {
+          disableClickPropagation: () => {},
+          disableScrollPropagation: () => {},
+          on: (element, eventName, listener) => element.addEventListener(eventName, listener),
+          stop: (event) => event?.stopPropagation?.(),
+        },
+      };
+
+      window.runBomRadarHarness = async () => {
+        const root = document.getElementById('root');
+        const results = [];
+        const config = {
+          layer: 'reflectivity',
+          zoom_level: 9,
+          map_height: 400,
+          basemap_provider: 'carto',
+          basemap_style: 'dark',
+          dark_basemap: true,
+          frame_delay: 500,
+          restart_delay: 1500,
+          frame_count: 9,
+          radar_opacity: 0.7,
+          chrome_opacity: 1,
+          show_marker: true,
+          show_zoom: true,
+          show_recenter: true,
+          show_layer_switcher: true,
+          show_playback: true,
+          show_legend: true,
+          square_style: false,
+          show_layer_label: false,
+          show_attribution: true,
+          allow_overzoom: true,
+          center_latitude: -27.55425269410533,
+          center_longitude: 153.08397843081823,
+        };
+        const hass = { config: { latitude: -27.55, longitude: 153.08 } };
+        const waitFor = async (predicate, label, timeoutMs = 1500) => {
+          const startedAt = performance.now();
+          while (performance.now() - startedAt < timeoutMs) {
+            if (predicate()) return;
+            await new Promise((resolve) => setTimeout(resolve, 20));
+          }
+          throw new Error(`Timed out waiting for ${label}`);
+        };
+        const assert = (condition, label) => {
+          if (!condition) throw new Error(label);
+          results.push(`PASS ${label}`);
+        };
+
+        const card = document.createElement('bom-radar-card');
+        card.setConfig(config);
+        card.hass = hass;
+        assert(card._initialized === false, 'detached config+hass does not initialize');
+
+        root.appendChild(card);
+        await waitFor(() => card._timestamps?.length === 9, 'first connected init');
+        assert(card.shadowRoot.getElementById('timeline').children.length === 9, 'timeline populated on first attach');
+        assert(card.shadowRoot.getElementById('loading').classList.contains('hidden'), 'loading overlay hidden on first attach');
+        assert(card._map.invalidateSizeCalls > 0, 'map resize invalidated on first attach');
+
+        const firstMap = card._map;
+        root.removeChild(card);
+        assert(card._map === null, 'map cleaned up after sidebar navigation away');
+
+        root.appendChild(card);
+        await waitFor(() => card._map && card._map !== firstMap && card._timestamps?.length === 9, 'reconnected init');
+        assert(card.shadowRoot.getElementById('timeline').children.length === 9, 'timeline populated after sidebar navigation back');
+        assert(card.shadowRoot.getElementById('loading').classList.contains('hidden'), 'loading overlay hidden after sidebar navigation back');
+        assert(card._map.invalidateSizeCalls > 0, 'map resize invalidated after navigation back');
+
+        return results;
+      };
+    </script>
+    <script type="module" src="../dist/bom-radar-card.js"></script>
+    <script type="module">
+      const status = document.getElementById('status');
+      const results = document.getElementById('results');
+      try {
+        await customElements.whenDefined('bom-radar-card');
+        const output = await window.runBomRadarHarness();
+        status.textContent = 'PASS';
+        results.textContent = output.join('\n');
+      } catch (err) {
+        status.textContent = 'FAIL';
+        results.textContent = err?.stack || String(err);
+        throw err;
+      }
+    </script>
+  </body>
+</html>

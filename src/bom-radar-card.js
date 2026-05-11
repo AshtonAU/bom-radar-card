@@ -1259,11 +1259,18 @@ function createBomTileLayer(L, layerId, tileMatrixSet, time, options = {}) {
         setTimeout(() => done(null, tile), 0);
         return tile;
       }
-      tile.onload = () => done(null, tile);
+      let isDone = false;
+      const finish = () => {
+        if (isDone) return;
+        isDone = true;
+        done(null, tile);
+      };
+      tile.onload = finish;
       tile.onerror = () => {
         // Silently show transparent tile on error (e.g. timestamp not yet available)
+        tile.onerror = null;
         tile.src = TRANSPARENT_PIXEL;
-        done(null, tile);
+        finish();
       };
       tile.src = url;
       return tile;
@@ -1354,12 +1361,24 @@ class BomRadarCard extends HTMLElement {
     this._lastRadarDisplayZoom = null;
     this._pendingZoomRebuild = false;
     this._previousDisplayZoom = null;
+    this._initToken = 0;
   }
 
   connectedCallback() {
-    if (!this._initialized && this._hass && this._map === null && Object.keys(this._config).length > 0) {
-      this._init();
-    }
+    this._initIfReady();
+  }
+
+  _hasConfig() {
+    return Object.keys(this._config).length > 0;
+  }
+
+  _initIfReady() {
+    if (!this.isConnected || this._initialized || this._map || !this._hass || !this._hasConfig()) return;
+    this._init();
+  }
+
+  _isCurrentInit(initToken) {
+    return this.isConnected && this._initToken === initToken;
   }
 
   _getEstimatedCardHeight() {
@@ -1377,9 +1396,7 @@ class BomRadarCard extends HTMLElement {
 
   set hass(hass) {
     this._hass = hass;
-    if (!this._initialized) {
-      this._init();
-    }
+    this._initIfReady();
   }
 
   setConfig(config) {
@@ -1425,6 +1442,7 @@ class BomRadarCard extends HTMLElement {
       max_display_zoom: maxDisplayZoom,
       card_mod: config.card_mod,
     };
+    this._initIfReady();
   }
 
   getCardSize() {
@@ -1455,7 +1473,8 @@ class BomRadarCard extends HTMLElement {
   }
 
   async _init() {
-    if (this._initialized) return;
+    if (this._initialized || !this.isConnected || !this._hass || !this._hasConfig()) return;
+    const initToken = ++this._initToken;
     this._initialized = true;
 
     this.shadowRoot.innerHTML = `
@@ -1479,11 +1498,20 @@ class BomRadarCard extends HTMLElement {
 
     try {
       this._renderTopOverlays();
-      this._L = await loadLeaflet();
-      if (!this.isConnected) return;
-      await this._initMap(this._L);
-      if (!this.isConnected) {
-        this._cleanupMap();
+      const L = await loadLeaflet();
+      if (!this._isCurrentInit(initToken)) {
+        if (this._initToken === initToken) {
+          this._initialized = false;
+        }
+        return;
+      }
+      this._L = L;
+      await this._initMap(L, initToken);
+      if (!this._isCurrentInit(initToken)) {
+        if (this._initToken === initToken) {
+          this._cleanupMap();
+          this._initialized = false;
+        }
         return;
       }
       // Fade out loading overlay
@@ -1493,6 +1521,8 @@ class BomRadarCard extends HTMLElement {
         setTimeout(() => loading.remove(), 300);
       }
     } catch (err) {
+      if (!this._isCurrentInit(initToken)) return;
+      this._cleanupMap();
       this._initialized = false;
       console.error('BOM Radar Card: Failed to initialize', err);
       const loading = this.shadowRoot.getElementById('loading');
@@ -1502,7 +1532,7 @@ class BomRadarCard extends HTMLElement {
     }
   }
 
-  async _initMap(L) {
+  async _initMap(L, initToken) {
     const container = this.shadowRoot.getElementById('map');
     if (!container) return;
 
@@ -1525,6 +1555,7 @@ class BomRadarCard extends HTMLElement {
       this._map.attributionControl.setPrefix(false);
     }
     this._lastRadarDisplayZoom = this._map.getZoom();
+    this._scheduleMapResize();
 
     // Add zoom control to top-right
     if (this._config.show_zoom) {
@@ -1545,8 +1576,8 @@ class BomRadarCard extends HTMLElement {
     }).addTo(this._map);
 
     // Load radar data (middle layer)
-    await this._loadRadarData(L);
-    if (!this.isConnected || !this._map) return;
+    const loadedRadar = await this._loadRadarData(L, initToken);
+    if (!loadedRadar || !this._isCurrentInit(initToken) || !this._map) return;
 
     // Labels on top of radar
     if (basemapConfig.labelsUrl) {
@@ -1605,10 +1636,21 @@ class BomRadarCard extends HTMLElement {
 
     // Handle resize
     this._resizeObserver = new ResizeObserver(() => {
-      this._map?.invalidateSize();
+      this._scheduleMapResize();
       this._fitLayerSwitcherPanel();
     });
     this._resizeObserver.observe(container);
+    this._scheduleMapResize();
+  }
+
+  _scheduleMapResize() {
+    const resize = () => this._map?.invalidateSize();
+    resize();
+    if (typeof requestAnimationFrame === 'function') {
+      requestAnimationFrame(resize);
+    } else {
+      setTimeout(resize, 0);
+    }
   }
 
   _addRecenterControl(L) {
@@ -1767,17 +1809,21 @@ class BomRadarCard extends HTMLElement {
     }
   }
 
-  async _loadRadarData(L) {
+  async _loadRadarData(L, initToken = this._initToken) {
+    const layerKey = this._config.layer;
     const layerConfig = BOM_LAYERS[this._config.layer] || BOM_LAYERS.reflectivity;
     const timestamps = await getLayerTimestamps(layerConfig, this._config.frame_count);
 
-    if (!this.isConnected || !this._map || !timestamps.length) return;
+    if (!this._isCurrentInit(initToken) || !this._map || !timestamps.length || this._config.layer !== layerKey) {
+      return false;
+    }
 
     this._timestamps = timestamps;
     this._currentFrame = layerConfig.initialFrame === 'first' ? 0 : this._timestamps.length - 1;
     this._replaceRadarLayers(L, layerConfig);
     this._updateTimeline();
     this._updateTimeLabel();
+    return true;
   }
 
   _replaceRadarLayers(L, layerConfig) {
@@ -1819,10 +1865,12 @@ class BomRadarCard extends HTMLElement {
 
   async _refreshData() {
     if (!this._L || !this._map) return;
+    const refreshToken = this._initToken;
     try {
       const wasPlaying = this._playing;
       if (wasPlaying) this._stopAnimation();
-      await this._loadRadarData(this._L);
+      const loadedRadar = await this._loadRadarData(this._L, refreshToken);
+      if (!loadedRadar || !this._isCurrentInit(refreshToken) || !this._map) return;
       this._buildTimeline();
       if (wasPlaying) this._startAnimation();
     } catch (err) {
@@ -1938,6 +1986,7 @@ class BomRadarCard extends HTMLElement {
   }
 
   disconnectedCallback() {
+    this._initToken += 1;
     this._cleanupMap();
     this._initialized = false;
   }
