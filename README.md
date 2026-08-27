@@ -317,15 +317,28 @@ The built-in qualitative legend applies to `rain_rate` and `reflectivity`. Other
 | Provider | Included styles | API key |
 | --- | --- | --- |
 | `bom` | Default, Dark, Auto | Not required |
-| `carto` | Voyager Light, Dark Matter, Auto | Not required |
+| `carto` | Voyager Light, Dark Matter, Auto | Optional (recommended) |
 | `stadia` | Alidade Light/Dark, Outdoors, OSM Bright, Terrain, Satellite | Domain auth or API key required |
 | `esri` | World Imagery, World Topographic | May be required |
 
-Set `basemap_provider: carto` to retain the card's older CARTO appearance. Provider access terms can change; if a third-party basemap rejects tile requests, configure that provider's authentication rather than changing BOM radar settings.
+Set `basemap_provider: carto` to retain the card's older CARTO appearance. Provider access terms can change; if a third-party basemap rejects tile requests, configure that provider's authentication rather than changing BOM radar settings. CARTO now requires a free API key for reliable, watermark-free tiles on most accounts — see below.
 
 ### Getting basemap provider keys
 
-`bom` and `carto` do not need a key. Stadia Maps and Esri share the `basemap_api_key` field; only the selected provider receives it.
+`bom` does not need a key. CARTO, Stadia Maps, and Esri share the `basemap_api_key` field; only the selected provider receives it.
+
+<details>
+<summary><strong>CARTO authentication</strong></summary>
+
+CARTO's basemap tiles now require a free API key for most accounts; without one you may see a "Missing API key" watermark on the map.
+
+1. Create a free CARTO account at [carto.com](https://carto.com/).
+2. Open **Your basemaps** (or the [Basemaps section of the CARTO dashboard](https://console.carto.com/basemaps)) and copy the default API key, or create a new one scoped to basemaps.
+3. Add the key as `basemap_api_key` when using `basemap_provider: carto`.
+
+- [CARTO basemaps documentation](https://docs.carto.com/carto-for-developers/carto-for-react/guides/basemaps)
+
+</details>
 
 > [!WARNING]
 > `basemap_api_key` is a client-side credential. It is stored in the dashboard
@@ -430,9 +443,9 @@ The card requests weather tiles from BOM's own mapping service rather than a thi
 
 Upgrade to v1.11.0 or later and hard-refresh the browser. This release retains the cached-view and card-mod fixes while adding further guarded resize and reconnect handling.
 
-### A Stadia Maps or Esri basemap is blank
+### A CARTO, Stadia Maps, or Esri basemap is blank or shows a watermark
 
-The BOM weather layer and third-party basemap are separate services. Add a valid client `basemap_api_key` or configure the provider's domain authentication. If browser developer tools show a `401` or `403` tile response, check that the exact Home Assistant hostname in the browser is allowed. BOM and CARTO remain the no-key alternatives.
+The BOM weather layer and third-party basemap are separate services. Add a valid client `basemap_api_key` for the selected provider, or configure the provider's domain authentication. If browser developer tools show a `401` or `403` tile response, check that the exact Home Assistant hostname in the browser is allowed. A CARTO map showing a "Missing API key" watermark needs a free CARTO `basemap_api_key` (see [Getting basemap provider keys](#getting-basemap-provider-keys)). BOM remains the only always-no-key option.
 
 ### The timeline shows fewer frames than requested
 

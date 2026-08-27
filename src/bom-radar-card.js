@@ -318,6 +318,17 @@ function getBasemapConfig(config, hass) {
   const apiKey = typeof config?.basemap_api_key === 'string' ? config.basemap_api_key.trim() : '';
   const stadiaKeySuffix = apiKey ? `?api_key=${encodeURIComponent(apiKey)}` : '';
   const esriTokenSuffix = apiKey ? `?token=${encodeURIComponent(apiKey)}` : '';
+  const cartoKeySuffix = apiKey ? `?key=${encodeURIComponent(apiKey)}` : '';
+
+  if (provider === 'carto') {
+    return {
+      ...styleConfig,
+      provider,
+      style,
+      baseUrl: `${styleConfig.baseUrl}${cartoKeySuffix}`,
+      labelsUrl: styleConfig.labelsUrl ? `${styleConfig.labelsUrl}${cartoKeySuffix}` : null,
+    };
+  }
 
   if (provider === 'stadia') {
     return {
@@ -2094,7 +2105,7 @@ class BomRadarCardEditor extends HTMLElement {
           <div class="row">
             <label>Basemap API Key (Optional)</label>
             <input type="password" id="basemap_api_key" value="${escapeHtml(cfg.basemap_api_key || '')}" autocomplete="off">
-            <div class="help-text">Not needed for BOM or CARTO. Stadia Maps requires domain authentication or a browser API key; Esri may require a browser API key for the selected service. See the <a href="https://github.com/AshtonAU/bom-radar-card#getting-basemap-provider-keys" target="_blank" rel="noreferrer">README provider-key guide</a>.</div>
+            <div class="help-text">Not needed for BOM. CARTO now recommends a free API key to avoid a watermark; Stadia Maps requires domain authentication or a browser API key; Esri may require a browser API key for the selected service. See the <a href="https://github.com/AshtonAU/bom-radar-card#getting-basemap-provider-keys" target="_blank" rel="noreferrer">README provider-key guide</a>.</div>
           </div>
           ${this._toggle('show_bom_boundaries', 'BOM state borders overlay', bomReferenceLayerKeys.includes('state_borders'))}
           <div class="row">
