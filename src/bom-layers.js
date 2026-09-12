@@ -6,8 +6,8 @@
  */
 
 export const BOM_LAYER_GROUPS = [
-  'Rain / observed',
-  'Rain / forecast',
+  'Observed rain',
+  'Rain forecast',
   'Wind',
   'Waves',
   'Temperature',
@@ -46,8 +46,8 @@ export const BOM_TILE_MATRIX_SETS = {
 export const BOM_LAYERS = {
   'rain_rate': {
     id: 'atm_surf_air_precip_rate_1hr_total_mm_h',
-    name: 'Rain Rate',
-    category: 'Rain / observed',
+    name: 'Rain rate',
+    category: 'Observed rain',
     unit: 'mm/h',
     tileMatrixSet: 'GoogleMapsCompatible_BoM',
     legendType: 'rainRadar',
@@ -58,8 +58,8 @@ export const BOM_LAYERS = {
   },
   'accumulation_1hr': {
     id: 'atm_surf_air_precip_accumulation_1hr_total_mm',
-    name: 'Estimated Rain 1hr',
-    category: 'Rain / observed',
+    name: 'Estimated rain 1 hr',
+    category: 'Observed rain',
     unit: 'mm',
     tileMatrixSet: 'GoogleMapsCompatible_BoM',
     legendType: 'numerical',
@@ -70,8 +70,8 @@ export const BOM_LAYERS = {
   },
   'accumulation_24hr': {
     id: 'atm_surf_air_precip_accumulation_24hr_total_mm',
-    name: 'Accumulated Rain 24hr',
-    category: 'Rain / observed',
+    name: 'Accumulated rain 24 hr',
+    category: 'Observed rain',
     unit: 'mm',
     tileMatrixSet: 'GoogleMapsCompatible_BoM',
     legendType: 'numerical',
@@ -84,8 +84,8 @@ export const BOM_LAYERS = {
   },
   'reflectivity': {
     id: 'atm_surf_air_precip_reflectivity_dbz',
-    name: 'Rain Reflectivity',
-    category: 'Rain / observed',
+    name: 'Rain reflectivity',
+    category: 'Observed rain',
     unit: 'dBZ',
     tileMatrixSet: 'GoogleMapsCompatible_BoM',
     legendType: 'rainRadar',
@@ -96,8 +96,8 @@ export const BOM_LAYERS = {
   },
   'forecast_rain_50pct_3hr': {
     id: 'atm_surf_air_precip_exceeding_50percentchance_total_mm_3hourly',
-    name: 'Forecast Rain 50% 3hr',
-    category: 'Rain / forecast',
+    name: 'Forecast rain 50% · 3 hr',
+    category: 'Rain forecast',
     unit: 'mm',
     tileMatrixSet: 'GoogleMapsCompatible_BoM_ADFD',
     legendType: 'numerical',
@@ -108,8 +108,8 @@ export const BOM_LAYERS = {
   },
   'forecast_rain_50pct_daily': {
     id: 'atm_surf_air_precip_exceeding_50percentchance_total_mm_daily',
-    name: 'Forecast Rain 50% Daily',
-    category: 'Rain / forecast',
+    name: 'Forecast rain 50% · daily',
+    category: 'Rain forecast',
     unit: 'mm',
     tileMatrixSet: 'GoogleMapsCompatible_BoM_ADFD',
     legendType: 'numerical',
@@ -122,8 +122,8 @@ export const BOM_LAYERS = {
   },
   'forecast_rain_25pct_3hr': {
     id: 'atm_surf_air_precip_exceeding_25percentchance_total_mm_3hourly',
-    name: 'Forecast Rain 25% 3hr',
-    category: 'Rain / forecast',
+    name: 'Forecast rain 25% · 3 hr',
+    category: 'Rain forecast',
     unit: 'mm',
     tileMatrixSet: 'GoogleMapsCompatible_BoM_ADFD',
     legendType: 'numerical',
@@ -134,8 +134,8 @@ export const BOM_LAYERS = {
   },
   'forecast_rain_25pct_daily': {
     id: 'atm_surf_air_precip_exceeding_25percentchance_total_mm_daily',
-    name: 'Forecast Rain 25% Daily',
-    category: 'Rain / forecast',
+    name: 'Forecast rain 25% · daily',
+    category: 'Rain forecast',
     unit: 'mm',
     tileMatrixSet: 'GoogleMapsCompatible_BoM_ADFD',
     legendType: 'numerical',
@@ -148,8 +148,8 @@ export const BOM_LAYERS = {
   },
   'forecast_rain_10pct_3hr': {
     id: 'atm_surf_air_precip_exceeding_10percentchance_total_mm_3hourly',
-    name: 'Forecast Rain 10% 3hr',
-    category: 'Rain / forecast',
+    name: 'Forecast rain 10% · 3 hr',
+    category: 'Rain forecast',
     unit: 'mm',
     tileMatrixSet: 'GoogleMapsCompatible_BoM_ADFD',
     legendType: 'numerical',
@@ -160,8 +160,8 @@ export const BOM_LAYERS = {
   },
   'forecast_rain_10pct_daily': {
     id: 'atm_surf_air_precip_exceeding_10percentchance_total_mm_daily',
-    name: 'Forecast Rain 10% Daily',
-    category: 'Rain / forecast',
+    name: 'Forecast rain 10% · daily',
+    category: 'Rain forecast',
     unit: 'mm',
     tileMatrixSet: 'GoogleMapsCompatible_BoM_ADFD',
     legendType: 'numerical',
@@ -174,8 +174,8 @@ export const BOM_LAYERS = {
   },
   'forecast_rain_chance_3hr': {
     id: 'atm_surf_air_precip_any_probability_percent_3hourly',
-    name: 'Chance of Rain 3hr',
-    category: 'Rain / forecast',
+    name: 'Chance of rain · 3 hr',
+    category: 'Rain forecast',
     unit: '%',
     tileMatrixSet: 'GoogleMapsCompatible_BoM_ADFD',
     legendType: 'numerical',
@@ -186,8 +186,8 @@ export const BOM_LAYERS = {
   },
   'forecast_rain_chance_daily': {
     id: 'atm_surf_air_precip_any_probability_percent_daily',
-    name: 'Chance of Rain Daily',
-    category: 'Rain / forecast',
+    name: 'Chance of rain · daily',
+    category: 'Rain forecast',
     unit: '%',
     tileMatrixSet: 'GoogleMapsCompatible_BoM_ADFD',
     legendType: 'numerical',
@@ -200,7 +200,7 @@ export const BOM_LAYERS = {
   },
   'wind_speed_kmh': {
     id: 'atm_surf_air_wind_speed_10m_avg_kmh_3hourly',
-    name: 'Wind Speed',
+    name: 'Wind speed',
     category: 'Wind',
     unit: 'km/h',
     tileMatrixSet: 'GoogleMapsCompatible_BoM_ADFD',
@@ -212,7 +212,7 @@ export const BOM_LAYERS = {
   },
   'wind_speed_kt': {
     id: 'atm_surf_air_wind_speed_10m_avg_kt_3hourly',
-    name: 'Wind Speed',
+    name: 'Wind speed',
     category: 'Wind',
     unit: 'kt',
     tileMatrixSet: 'GoogleMapsCompatible_BoM_ADFD',
@@ -224,7 +224,7 @@ export const BOM_LAYERS = {
   },
   'wind_direction': {
     id: 'atm_surf_air_wind_dirn_10m_deg_t_3hourly',
-    name: 'Wind Direction',
+    name: 'Wind direction',
     category: 'Wind',
     unit: 'deg',
     tileMatrixSet: 'GoogleMapsCompatible_BoM_ADFD',
@@ -236,7 +236,7 @@ export const BOM_LAYERS = {
   },
   'wave_total_height': {
     id: 'ocn_surf_water_wave_total_height_m_3hourly',
-    name: 'Total Wave Height',
+    name: 'Total wave height',
     category: 'Waves',
     unit: 'm',
     tileMatrixSet: 'GoogleMapsCompatible_BoM_ADFD',
@@ -248,7 +248,7 @@ export const BOM_LAYERS = {
   },
   'swell_1_height': {
     id: 'ocn_surf_water_swell_1st_height_m_3hourly',
-    name: 'Swell 1 Height',
+    name: 'Swell 1 height',
     category: 'Waves',
     unit: 'm',
     tileMatrixSet: 'GoogleMapsCompatible_BoM_ADFD',
@@ -260,7 +260,7 @@ export const BOM_LAYERS = {
   },
   'swell_1_direction': {
     id: 'ocn_surf_water_swell_1st_dirn_deg_t_3hourly',
-    name: 'Swell 1 Direction',
+    name: 'Swell 1 direction',
     category: 'Waves',
     unit: 'deg',
     tileMatrixSet: 'GoogleMapsCompatible_BoM_ADFD',
@@ -272,7 +272,7 @@ export const BOM_LAYERS = {
   },
   'swell_2_height': {
     id: 'ocn_surf_water_swell_2nd_height_m_3hourly',
-    name: 'Swell 2 Height',
+    name: 'Swell 2 height',
     category: 'Waves',
     unit: 'm',
     tileMatrixSet: 'GoogleMapsCompatible_BoM_ADFD',
@@ -284,7 +284,7 @@ export const BOM_LAYERS = {
   },
   'swell_2_direction': {
     id: 'ocn_surf_water_swell_2nd_dirn_deg_t_3hourly',
-    name: 'Swell 2 Direction',
+    name: 'Swell 2 direction',
     category: 'Waves',
     unit: 'deg',
     tileMatrixSet: 'GoogleMapsCompatible_BoM_ADFD',
@@ -296,7 +296,7 @@ export const BOM_LAYERS = {
   },
   'wind_wave_height': {
     id: 'ocn_surf_water_wave_height_wind_m_3hourly',
-    name: 'Wind Wave Height',
+    name: 'Wind wave height',
     category: 'Waves',
     unit: 'm',
     tileMatrixSet: 'GoogleMapsCompatible_BoM_ADFD',
@@ -308,7 +308,7 @@ export const BOM_LAYERS = {
   },
   'air_temperature': {
     id: 'atm_surf_air_temp_cel_3hourly',
-    name: 'Air Temperature',
+    name: 'Air temperature',
     category: 'Temperature',
     unit: '°C',
     tileMatrixSet: 'GoogleMapsCompatible_BoM_ADFD',
@@ -320,7 +320,7 @@ export const BOM_LAYERS = {
   },
   'feels_like': {
     id: 'atm_surf_air_temp_apparent_cel_3hourly',
-    name: 'Feels Like',
+    name: 'Feels like',
     category: 'Temperature',
     unit: '°C',
     tileMatrixSet: 'GoogleMapsCompatible_BoM_ADFD',
@@ -332,7 +332,7 @@ export const BOM_LAYERS = {
   },
   'temperature_max_daily': {
     id: 'atm_surf_air_temp_max_cel_daily',
-    name: 'Daytime Maximum',
+    name: 'Daytime maximum',
     category: 'Temperature',
     unit: '°C',
     tileMatrixSet: 'GoogleMapsCompatible_BoM_ADFD',
@@ -346,7 +346,7 @@ export const BOM_LAYERS = {
   },
   'temperature_min_daily': {
     id: 'atm_surf_air_temp_min_cel_daily',
-    name: 'Overnight Minimum',
+    name: 'Overnight minimum',
     category: 'Temperature',
     unit: '°C',
     tileMatrixSet: 'GoogleMapsCompatible_BoM_ADFD',
@@ -360,7 +360,7 @@ export const BOM_LAYERS = {
   },
   'heatwave_severity': {
     id: 'atm_surf_air_temp_heatwave_severity_code_daily',
-    name: 'Heatwave Severity',
+    name: 'Heatwave severity',
     category: 'Temperature',
     unit: 'level',
     tileMatrixSet: 'GoogleMapsCompatible_BoM_ADFD',
@@ -374,7 +374,7 @@ export const BOM_LAYERS = {
   },
   'relative_humidity': {
     id: 'atm_surf_air_hum_relative_percent_3hourly',
-    name: 'Relative Humidity',
+    name: 'Relative humidity',
     category: 'Humidity & UV',
     unit: '%',
     tileMatrixSet: 'GoogleMapsCompatible_BoM_ADFD',
@@ -386,7 +386,7 @@ export const BOM_LAYERS = {
   },
   'dew_point': {
     id: 'atm_surf_air_temp_dew_pt_cel_3hourly',
-    name: 'Dew Point',
+    name: 'Dew point',
     category: 'Humidity & UV',
     unit: '°C',
     tileMatrixSet: 'GoogleMapsCompatible_BoM_ADFD',
@@ -398,7 +398,7 @@ export const BOM_LAYERS = {
   },
   'uv_index': {
     id: 'atm_surf_air_radiation_uv_clear_sky_code_3hourly',
-    name: 'UV Index',
+    name: 'UV index',
     category: 'Humidity & UV',
     unit: 'index',
     tileMatrixSet: 'GoogleMapsCompatible_BoM',
@@ -410,7 +410,7 @@ export const BOM_LAYERS = {
   },
   'uv_max_daily': {
     id: 'atm_surf_air_radiation_uv_clear_sky_max_code_daily',
-    name: 'Max UV Daily',
+    name: 'Maximum UV · daily',
     category: 'Humidity & UV',
     unit: 'index',
     tileMatrixSet: 'GoogleMapsCompatible_BoM',

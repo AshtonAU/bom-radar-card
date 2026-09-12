@@ -1,5 +1,74 @@
 # Changelog
 
+## v1.12.0 - 2026-09-12
+
+### Changed
+
+- Replace the narrow layer menu with a responsive grouped grid and fixed close
+  header. Keep scrolling inside the picker, constrain it to the visible screen
+  and card, and reveal the selected layer without moving the dashboard.
+- Inherit Home Assistant typography and use softer, consistent control corners.
+  Bundle licensed Inter as a fallback after the dashboard's font variables,
+  followed by system fonts; retain the MIT project licence and include the
+  font's OFL notice in the build.
+- Make card controls, panels and the visual editor inherit dashboard theme
+  colours, including custom themes, with light/dark fallbacks for missing theme
+  variables. Use Home Assistant's primary colour for the default UI accent and
+  preserve existing optional overrides. Appearance follows the dashboard without
+  a separate card theme picker; basemap day/night styles and BOM legend colours
+  remain independent. Keep open panels solid when control opacity is reduced.
+- Group editor settings into collapsible sections, use sentence-case labels
+  and layer names, and display opacity as percentages. Layer IDs and fractional
+  YAML opacity values remain unchanged.
+- Keep playback hover feedback on the icon only, without a background circle.
+- Use a neutral, theme-aware loading spinner rather than the UI accent colour.
+- Match playback to the compact toolbar, improve layer-name and timestamp
+  readability, and enlarge timeline hit areas without adding visual weight.
+  Layer menus support Escape and focus return independently of the colour key;
+  playback exposes its state and decorative motion honours reduced motion.
+- Consolidate map controls into one compact toolbar with consistent spacing,
+  keyboard focus indicators and 44px touch targets. Colour keys and layer menus
+  overlay the toolbar inside the card, with fixed headers, internal scrolling,
+  and room for playback underneath when height permits. Short cards use a
+  compact toolbar that wraps on narrow widths, with the layer label below it.
+  Hide the optional layer label when it cannot fit clear of controls and credits,
+  restoring it when space becomes available.
+  Panels temporarily hide playback if needed for readable content, restoring it
+  when they close or more space becomes available.
+- Generate the existing smooth radar strip from the shared BOM colour tables,
+  removing its duplicate hard-coded palette while preserving the exact gradient
+  stops and six-pixel height. Screen-reader labels distinguish reflectivity from
+  rain rate and describe the strip as qualitative.
+- Use one renderer and one 6px top-strip layout for all 31 colour-bearing layers.
+  Numerical palettes blend smoothly; categorical palettes retain hard boundaries.
+  The expanded key uses the same source data for exact swatches and ranges.
+
+### Added
+
+- Added optional `auto_hide_controls` (off by default). After 10 seconds of
+  inactivity, the toolbar, playback, time, weather-layer label and attribution
+  fade away, leaving the map and any enabled top colour strip. Pointer movement or a first
+  reveal-only tap restores the interface. Open panels and keyboard-focused
+  controls stay visible; the colour strip remains interactive. Reduced-motion
+  preferences disable the fade. Provider attribution requirements still apply.
+- Added a default-on, configurable colour-key button beside the layer selector.
+  Its initially closed panel shows exact BOM swatches and units for all 31
+  colour-bearing layers, independently of strip visibility. Supports Escape,
+  focus return, map-interaction dismissal and disconnect cleanup. Direction-only
+  layers hide the button. Tapping the strip opens the same panel, including on
+  initial load and after reconnecting the card; both triggers share its open state.
+- Added presentation-independent legend definitions for all 34 weather layers:
+  31 verified BOM colour tables and three direction-arrow definitions. Rain rate
+  and reflectivity retain distinct units and band labels.
+- Added a read-only `check:legends` command to detect upstream colour, label or
+  direction-renderer changes, plus deterministic data and lifecycle tests.
+- Added an optional, default-off `show_weather_legend` strip and a
+  local `preview:legends` comparison for Chromium visual QA. The existing radar
+  gradient, map height and strip visibility defaults are unchanged.
+- Added `/visual` to the local preview server for using the card and settings
+  editor together in light and dark appearance. Preview edits stay local and
+  do not update a Home Assistant dashboard.
+
 ## v1.11.1 - 2026-08-28
 
 ### Fixed

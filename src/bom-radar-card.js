@@ -33,8 +33,13 @@ import {
   createTimestampAvailabilityResolver,
 } from './timestamp-availability.js';
 import { generateFallbackTimestamps } from './timestamps.js';
+import { getLegendConfig, renderLegendHtml, renderLegendBandsHtml } from './legend.js';
+import { loadUiFont } from './ui-font.js';
+import { getLayerPickerBounds } from './layer-picker-layout.js';
+import { UI_THEME_CSS, syncUiTheme, observeUiTheme } from './ui-theme.js';
+import { createAutoHideControls } from './auto-hide-controls.js';
 
-const CARD_VERSION = '1.11.1';
+const CARD_VERSION = '1.12.0';
 const DEFAULT_ACCENT_COLOR = '#00BCD4';
 const DEFAULT_UI_ACCENT_COLOR = '#F8FAFC';
 
@@ -48,10 +53,6 @@ console.info(
 const BOM_WMTS_BASE = 'https://api.bom.gov.au/apikey/v1/mapping/timeseries/wmts';
 
 const DEFAULT_ENABLED_LAYERS = Object.keys(BOM_LAYERS);
-
-const RADAR_LEGEND = {
-  gradient: 'linear-gradient(90deg, rgb(245, 245, 255) 0%, rgb(180, 180, 255) 7%, rgb(120, 120, 255) 14%, rgb(20, 20, 255) 21%, rgb(0, 216, 195) 28%, rgb(0, 150, 144) 35%, rgb(0, 102, 102) 42%, rgb(255, 255, 0) 49%, rgb(255, 200, 0) 56%, rgb(255, 150, 0) 63%, rgb(255, 100, 0) 70%, rgb(255, 0, 0) 77%, rgb(200, 0, 0) 84%, rgb(120, 0, 0) 91%, rgb(40, 0, 0) 100%)',
-};
 
 const MIN_MAP_ZOOM = 3;
 const MAX_BOM_NATIVE_ZOOM = 8;
@@ -458,6 +459,7 @@ const ICON_PLAY = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14
 const ICON_PAUSE = '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>';
 const ICON_RECENTER = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v3"/><path d="M12 19v3"/><path d="M2 12h3"/><path d="M19 12h3"/></svg>';
 const ICON_LAYERS = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4 4 8l8 4 8-4-8-4Z"/><path d="m4 12 8 4 8-4"/><path d="m4 16 8 4 8-4"/></svg>';
+const ICON_COLOUR_KEY = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><rect x="3" y="3" width="5" height="5" rx="1"/><rect x="3" y="10" width="5" height="5" rx="1"/><rect x="3" y="17" width="5" height="4" rx="1"/><path d="M12 5.5h9M12 12.5h9M12 19h9"/></svg>';
 
 // Leaflet CSS (minimal, inlined for Shadow DOM)
 const LEAFLET_CSS = `
@@ -471,7 +473,7 @@ const LEAFLET_CSS = `
 .leaflet-interactive{cursor:pointer}
 .leaflet-grab{cursor:-webkit-grab;cursor:-moz-grab;cursor:grab}
 .leaflet-crosshair,.leaflet-crosshair .leaflet-interactive{cursor:crosshair}
-.leaflet-control-zoom-in,.leaflet-control-zoom-out{font:bold 18px 'Lucida Console',Monaco,monospace;text-indent:1px}
+.leaflet-control-zoom-in,.leaflet-control-zoom-out{font-family:inherit;font-size:20px;font-weight:500;text-indent:0}
 .leaflet-touch .leaflet-control-zoom-in,.leaflet-touch .leaflet-control-zoom-out{font-size:22px}
 .leaflet-map-pane,.leaflet-tile,.leaflet-marker-icon,.leaflet-marker-shadow,.leaflet-tile-container,.leaflet-pane>svg,.leaflet-pane>canvas,.leaflet-zoom-box,.leaflet-image-layer,.leaflet-layer{position:absolute;left:0;top:0;pointer-events:none}
 .leaflet-pane{z-index:400}
@@ -492,52 +494,60 @@ const LEAFLET_CSS = `
 .leaflet-bottom .leaflet-control{margin-bottom:8px}
 .leaflet-left .leaflet-control{margin-left:8px}
 .leaflet-right .leaflet-control{margin-right:8px}
-.leaflet-control-zoom{border:none;border-radius:var(--bom-control-radius);overflow:hidden;box-shadow:0 1px 6px rgba(0,0,0,0.24)}
-.leaflet-control-zoom a{background-color:rgb(14 18 32 / calc(0.72 * var(--bom-chrome-opacity, 1)));backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);color:rgba(255,255,255,0.68);width:30px;height:30px;line-height:30px;text-align:center;text-decoration:none;display:block;border-bottom:1px solid rgb(255 255 255 / calc(0.05 * var(--bom-chrome-opacity, 1)));transition:background 0.15s,color 0.15s,opacity 0.15s}
-.leaflet-control-zoom a:hover{background-color:rgb(18 24 42 / calc(0.84 * var(--bom-chrome-opacity, 1)));color:white}
+.leaflet-top.leaflet-right{top:8px;right:8px;display:flex;flex-direction:column;padding:2px;background:var(--bom-chrome-background);border:1px solid var(--bom-border);border-radius:var(--bom-control-radius);box-shadow:var(--bom-shadow)}
+.leaflet-top.leaflet-right[hidden]{display:none}
+.leaflet-top.leaflet-right > .leaflet-control{margin:0;float:none;clear:none}
+.leaflet-control-zoom{border:none}
+.leaflet-control-zoom a{background:transparent;color:var(--bom-text);width:var(--bom-control-size);height:var(--bom-control-size);line-height:var(--bom-control-size);text-align:center;text-decoration:none;display:block;border-radius:var(--bom-control-radius);transition:background 0.15s,color 0.15s,opacity 0.15s}
+.leaflet-control-zoom a.leaflet-disabled{opacity:0.4;cursor:default}
 .leaflet-control-zoom-in{border-top-left-radius:var(--bom-control-radius);border-top-right-radius:var(--bom-control-radius)}
 .leaflet-control-zoom-out{border-bottom-left-radius:var(--bom-control-radius);border-bottom-right-radius:var(--bom-control-radius);border-bottom:none}
-.leaflet-control-attribution{background:rgb(7 10 18 / calc(0.58 * var(--bom-chrome-opacity, 1)))!important;backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);color:rgba(255,255,255,0.76);font-size:10px;padding:2px 6px;border-radius:var(--bom-attribution-radius);line-height:1.4}
-.leaflet-control-attribution a{color:color-mix(in srgb, var(--bom-ui-accent-color, #F8FAFC) 82%, white 18%);text-decoration:none}
-.leaflet-touch .leaflet-control-zoom a{width:36px;height:36px;line-height:36px;font-size:18px}
-.bom-recenter-control{border:none;border-radius:var(--bom-control-radius);overflow:hidden;box-shadow:0 1px 6px rgba(0,0,0,0.24)}
-.bom-recenter-button{appearance:none;-webkit-appearance:none;background-color:rgb(14 18 32 / calc(0.72 * var(--bom-chrome-opacity, 1)));backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);color:rgba(255,255,255,0.68);width:30px;height:30px;padding:0;display:flex;align-items:center;justify-content:center;border:none;cursor:pointer;transition:background 0.15s,color 0.15s,opacity 0.15s}
-.bom-recenter-button:hover{background-color:rgb(18 24 42 / calc(0.84 * var(--bom-chrome-opacity, 1)));color:white}
+.leaflet-control-attribution{background:var(--bom-panel-background)!important;color:var(--bom-muted);font-size:10px;padding:2px 6px;border-radius:var(--bom-attribution-radius);line-height:1.4}
+.leaflet-control-attribution a{color:var(--bom-text);text-decoration:underline;text-underline-offset:2px}
+.leaflet-touch .leaflet-control-zoom a{font-size:18px}
+.bom-recenter-control{border:none}
+.bom-recenter-button{appearance:none;-webkit-appearance:none;background:transparent;color:var(--bom-text);width:var(--bom-control-size);height:var(--bom-control-size);padding:0;display:flex;align-items:center;justify-content:center;border:none;border-radius:var(--bom-control-radius);cursor:pointer;transition:background 0.15s,color 0.15s,opacity 0.15s}
 .bom-recenter-button svg{width:16px;height:16px}
-.leaflet-touch .bom-recenter-button{width:36px;height:36px}
-.bom-layer-control{position:relative}
-.bom-layer-button{appearance:none;-webkit-appearance:none;background-color:rgb(14 18 32 / calc(0.72 * var(--bom-chrome-opacity, 1)));backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);color:rgba(255,255,255,0.7);width:30px;height:30px;padding:0;display:flex;align-items:center;justify-content:center;border:none;border-radius:var(--bom-control-radius);cursor:pointer;box-shadow:0 1px 6px rgba(0,0,0,0.24);transition:background 0.15s,color 0.15s,opacity 0.15s}
-.bom-layer-button:hover,.bom-layer-button.is-open{background-color:rgb(18 24 42 / calc(0.84 * var(--bom-chrome-opacity, 1)));color:white}
+.leaflet-top.leaflet-right > .bom-layer-control{position:static}
+.bom-layer-button{appearance:none;-webkit-appearance:none;background:transparent;color:var(--bom-text);width:var(--bom-control-size);height:var(--bom-control-size);padding:0;display:flex;align-items:center;justify-content:center;border:none;border-radius:var(--bom-control-radius);cursor:pointer;transition:background 0.15s,color 0.15s,opacity 0.15s}
+.bom-layer-button.is-open{background:var(--bom-selected)}
 .bom-layer-button svg{width:16px;height:16px}
-.bom-layer-panel{position:absolute;top:0;right:38px;width:192px;max-width:192px;padding:4px;display:none;flex-direction:column;gap:3px;background:rgb(8 11 20 / calc(0.86 * var(--bom-chrome-opacity, 1)));backdrop-filter:blur(12px) saturate(1.35);-webkit-backdrop-filter:blur(12px) saturate(1.35);border:1px solid rgb(255 255 255 / calc(0.06 * var(--bom-chrome-opacity, 1)));border-radius:var(--bom-control-radius);box-shadow:0 8px 22px rgba(0,0,0,0.28)}
-.bom-layer-panel.is-open{display:flex}
-.bom-layer-panel{max-height:var(--bom-layer-panel-max-height, min(70vh,520px));overflow:auto;overscroll-behavior:contain}
-.bom-layer-group{padding:8px 10px 4px;font-size:10px;font-weight:700;line-height:1;letter-spacing:0.1em;text-transform:uppercase;color:rgba(255,255,255,0.34)}
-.bom-layer-option{appearance:none;-webkit-appearance:none;width:100%;padding:8px 10px;border:none;border-radius:calc(var(--bom-control-radius) - 2px);background:transparent;color:rgba(255,255,255,0.68);cursor:pointer;text-align:left;transition:background 0.15s,color 0.15s}
-.bom-layer-option:hover,.bom-layer-option.is-active{background:rgb(255 255 255 / calc(0.08 * var(--bom-chrome-opacity, 1)));color:white}
-.bom-layer-option-name{display:block;font-size:12px;font-weight:600;line-height:1.2}
-.bom-layer-option-unit{display:block;margin-top:2px;font-size:10px;letter-spacing:0.04em;text-transform:uppercase;opacity:0.64}
-.leaflet-touch .bom-layer-button{width:36px;height:36px}
-.leaflet-touch .bom-layer-panel{right:44px}
+.bom-layer-group{margin:0 0 8px;padding:0 2px;font-size:11px;font-weight:600;line-height:1.4;color:var(--bom-muted)}
+.bom-layer-section + .bom-layer-section{margin-top:16px}
+.bom-layer-grid{display:grid;grid-template-columns:repeat(var(--bom-layer-columns,2),minmax(0,1fr));gap:6px}
+.bom-layer-option{appearance:none;-webkit-appearance:none;position:relative;min-width:0;width:100%;min-height:56px;padding:9px 10px;border:1px solid var(--bom-border);border-radius:max(0px,calc(var(--bom-control-radius) - 2px));background:transparent;color:var(--bom-text);cursor:pointer;text-align:left;transition:background 0.15s,color 0.15s}
+.bom-layer-option.is-active{background:var(--bom-selected)}
+.bom-layer-option.is-active{border-color:var(--bom-ui-accent-color,#F8FAFC)}
+.bom-layer-option-name{display:block;font-size:13px;font-weight:500;line-height:1.35;overflow-wrap:anywhere}
+.bom-layer-option-unit{display:block;margin-top:4px;padding-right:16px;font-size:11px;color:var(--bom-muted)}
+.bom-layer-selected{position:absolute;right:9px;bottom:10px;width:14px;height:14px;color:var(--bom-ui-accent-color);visibility:hidden}
+.bom-layer-option.is-active .bom-layer-selected{visibility:visible}
 `;
 
 const CARD_CSS = `
+${UI_THEME_CSS}
 :host {
   display: block;
+  font-family: var(--bom-font-family);
+  -webkit-font-smoothing: antialiased;
 }
+button { font-family: inherit; }
 ha-card {
   overflow: hidden;
   position: relative;
   isolation: isolate;
   z-index: 0;
-  border-radius: var(--bom-card-radius, var(--ha-card-border-radius, 12px));
-  background: var(--ha-card-background, var(--card-background-color, rgba(26, 26, 46, 0.6)));
+  border-radius: var(--bom-card-radius, var(--ha-card-border-radius, var(--ha-border-radius-lg, 12px)));
+  background: var(--ha-card-background, var(--card-background-color, var(--bom-surface)));
   box-shadow: var(--ha-card-box-shadow, none);
 }
 .card-content {
-  --bom-control-radius: 8px;
+  /* Resolve opacity here, beneath the per-card config on ha-card. */
+  --bom-chrome-background: color-mix(in srgb, var(--bom-surface) calc(94% * var(--bom-chrome-opacity, 1)), transparent);
+  --bom-control-size: 36px;
+  --bom-control-radius: 10px;
   --bom-badge-radius: 8px;
-  --bom-bar-radius: 12px;
+  --bom-bar-radius: 10px;
   --bom-attribution-radius: 6px 0 0 0;
   --bom-track-radius: 1.5px;
   padding: 0;
@@ -552,16 +562,46 @@ ha-card {
   --bom-attribution-radius: 0px;
   --bom-track-radius: 0px;
 }
+.card-content.is-idle :is(.leaflet-top.leaflet-right, .controls, .layer-badge, .leaflet-control-attribution) {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 180ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.card-content.is-idle :is(.leaflet-top.leaflet-right, .controls, .leaflet-control-attribution) * {
+  pointer-events: none;
+}
 .card-content.has-top-legend .layer-badge {
   top: 16px;
 }
-.card-content.has-top-legend .leaflet-top .leaflet-control {
-  margin-top: 18px;
+.card-content.has-top-legend .leaflet-top.leaflet-right {
+  top: 14px;
+}
+.card-content.has-short-toolbar .leaflet-top.leaflet-right {
+  display: grid;
+  grid-template-columns: repeat(var(--bom-toolbar-columns, 5), var(--bom-control-size));
+}
+.card-content.has-short-toolbar .leaflet-top.leaflet-right > .leaflet-control {
+  display: contents;
+}
+.card-content.has-short-toolbar .layer-badge {
+  top: calc(var(--bom-toolbar-height) + 12px);
+  max-width: calc(100% - 16px);
+  padding: 2px 8px;
+  line-height: 1.25;
+}
+.card-content.has-short-toolbar.has-top-legend .layer-badge {
+  top: calc(var(--bom-toolbar-height) + 18px);
+}
+.card-content.panel-covers-playback .controls {
+  visibility: hidden;
+}
+.card-content.has-playback .leaflet-bottom.leaflet-right {
+  bottom: calc(var(--bom-control-size) + 16px);
 }
 #map {
   position: relative;
   width: 100%;
-  border-radius: var(--bom-card-radius, var(--ha-card-border-radius, 12px));
+  border-radius: var(--bom-card-radius, var(--ha-card-border-radius, var(--ha-border-radius-lg, 12px)));
   z-index: 0;
   background: #0d1117;
 }
@@ -575,28 +615,26 @@ ha-card {
   z-index: 4;
   display: flex;
   align-items: center;
-  gap: 7px;
-  padding: 5px 9px;
-  background: rgb(8 11 20 / calc(0.74 * var(--bom-chrome-opacity, 1)));
-  backdrop-filter: blur(12px) saturate(1.35);
-  -webkit-backdrop-filter: blur(12px) saturate(1.35);
+  gap: 6px;
+  padding: 2px 6px;
+  background: var(--bom-chrome-background);
   border-radius: var(--bom-bar-radius);
-  border: 1px solid rgb(255 255 255 / calc(0.05 * var(--bom-chrome-opacity, 1)));
-  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.24);
+  border: 1px solid var(--bom-border);
+  box-shadow: var(--bom-shadow);
 }
 .play-btn {
   background: none;
   border: none;
-  color: rgba(255, 255, 255, 0.78);
+  color: var(--bom-muted);
   cursor: pointer;
   padding: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 26px;
-  height: 26px;
+  width: var(--bom-control-size);
+  height: var(--bom-control-size);
   border-radius: var(--bom-control-radius);
-  transition: background 0.15s, transform 0.1s;
+  transition: color 0.15s, transform 0.1s;
   flex-shrink: 0;
 }
 .play-btn svg {
@@ -604,7 +642,7 @@ ha-card {
   height: 15px;
 }
 .play-btn:hover {
-  background: rgb(255 255 255 / calc(0.08 * var(--bom-chrome-opacity, 1)));
+  color: var(--bom-text);
 }
 .play-btn:active {
   transform: scale(0.92);
@@ -613,46 +651,56 @@ ha-card {
 /* Timeline */
 .timeline {
   flex: 1;
+  min-width: 0;
   display: flex;
   align-items: center;
   gap: 3px;
-  height: 24px;
+  height: var(--bom-control-size);
   padding: 0 2px;
 }
 .frame-dot {
   appearance: none;
   -webkit-appearance: none;
   flex: 1;
-  height: 3px;
+  min-width: 0;
+  height: 100%;
   border-radius: var(--bom-track-radius);
   border: 0;
   padding: 0;
-  background: rgba(255, 255, 255, 0.1);
+  background: transparent;
   cursor: pointer;
-  transition: background 0.2s, height 0.15s, box-shadow 0.2s;
   position: relative;
 }
-.frame-dot:hover {
-  background: rgba(255, 255, 255, 0.25);
-  height: 5px;
+.frame-dot::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(50% - 1.5px);
+  height: 3px;
+  border-radius: var(--bom-track-radius);
+  background: var(--bom-track);
+  transition: background 0.15s;
 }
-.frame-dot:focus-visible {
+.frame-dot:hover::after { background: var(--bom-muted); }
+.play-btn:focus-visible, .frame-dot:focus-visible, .bom-layer-option:focus-visible,
+.bom-layer-close:focus-visible, .bom-layer-body:focus-visible {
   outline: 2px solid var(--bom-ui-accent-color, #F8FAFC);
   outline-offset: 2px;
 }
-.frame-dot.active {
+.frame-dot.active::after {
   background: var(--bom-ui-accent-color, #F8FAFC);
+  top: calc(50% - 2.5px);
   height: 5px;
-  box-shadow: 0 0 8px color-mix(in srgb, var(--bom-ui-accent-color, #F8FAFC) 50%, transparent);
 }
-.frame-dot.past {
+.frame-dot.past::after {
   background: color-mix(in srgb, var(--bom-ui-accent-color, #F8FAFC) 25%, transparent);
 }
 
 /* Time label */
 .time-label {
-  color: rgba(255, 255, 255, 0.54);
-  font-size: 10px;
+  color: var(--bom-text);
+  font-size: 11px;
   font-weight: 500;
   min-width: 38px;
   text-align: right;
@@ -668,17 +716,26 @@ ha-card {
   left: 8px;
   z-index: 4;
   padding: 3px 9px;
-  background: rgb(8 11 20 / calc(0.58 * var(--bom-chrome-opacity, 1)));
+  max-width: calc(100% - var(--bom-control-size) - 40px);
+  box-sizing: border-box;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  background: var(--bom-chrome-background);
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
   border-radius: var(--bom-badge-radius);
-  border: 1px solid rgb(255 255 255 / calc(0.05 * var(--bom-chrome-opacity, 1)));
-  color: rgba(255, 255, 255, 0.5);
-  font-size: 9px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.7px;
+  border: 1px solid var(--bom-border);
+  color: var(--bom-text);
+  font-size: 12px;
+  font-weight: 500;
   pointer-events: none;
+}
+.card-content:has(.bom-layer-panel.is-open, .bom-key-panel:not([hidden])) .layer-badge {
+  visibility: hidden;
+}
+.card-content.has-crowded-label .layer-badge {
+  visibility: hidden;
 }
 
 /* Legend */
@@ -695,6 +752,51 @@ ha-card {
   border-radius: 0;
   box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.08);
 }
+.legend-open { position:absolute;top:0;left:0;right:0;height:12px;padding:0;border:0;background:none;cursor:pointer;pointer-events:auto; }
+.legend-open:focus-visible { outline:2px solid var(--bom-ui-accent-color,#F8FAFC);outline-offset:-2px; }
+.bom-key-cluster { display: flex; flex-direction: column; }
+.bom-key-button[hidden], .bom-key-panel[hidden] { display: none; }
+.leaflet-control-zoom a:focus-visible, .bom-recenter-button:focus-visible,
+.bom-layer-button:focus-visible, .bom-key-close:focus-visible, .bom-key-body:focus-visible {
+  outline: 2px solid var(--bom-ui-accent-color, #F8FAFC);
+  outline-offset: 2px;
+}
+.bom-layer-panel, .bom-key-panel {
+  position: absolute;
+  z-index: 4;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  color: var(--bom-text);
+  background: var(--bom-panel-background);
+  border: 1px solid var(--bom-border);
+  border-radius: var(--bom-control-radius);
+  box-shadow: var(--bom-shadow);
+  font-size: 12px;
+  line-height: 1.4;
+  font-variant-numeric: tabular-nums;
+}
+.bom-layer-panel:not(.is-open) { display:none; }
+.bom-layer-header, .bom-key-header { display:flex;align-items:center;gap:8px;padding-left:12px;flex-shrink:0;border-bottom:1px solid var(--bom-divider); }
+.bom-layer-title, .bom-key-title { flex:1;min-width:0;margin:0;font-size:14px;font-weight:600;line-height:1.4;letter-spacing:-0.015em;overflow-wrap:anywhere; }
+.bom-layer-count { flex-shrink:0;color:var(--bom-muted);font-size:11px; }
+.bom-layer-close, .bom-key-close { flex-shrink:0;width:44px;height:44px;background:none;border:0;color:inherit;cursor:pointer;font:inherit;font-size:22px; }
+.bom-layer-body, .bom-key-body { min-height:0;overflow:auto;overscroll-behavior:contain;padding:12px;scrollbar-width:thin;scrollbar-gutter:stable;scrollbar-color:var(--bom-scrollbar) transparent; }
+.bom-key-bands { list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(var(--bom-layer-columns,2),minmax(0,1fr));gap:8px 12px; }
+.bom-key-bands li { display:flex;align-items:center;gap:9px;min-width:0;min-height:28px;overflow-wrap:anywhere; }
+.bom-key-swatch { width:22px;height:22px;border-radius:4px;flex-shrink:0;box-shadow:inset 0 0 0 1px rgb(0 0 0 / 0.15),0 0 0 1px var(--bom-border); }
+.bom-key-note { margin:14px 0 0;color:var(--bom-muted);font-size:12px;line-height:1.5; }
+@media (hover: hover) and (pointer: fine) {
+  .leaflet-control-zoom a:not(.leaflet-disabled):hover,
+  .bom-recenter-button:hover, .bom-layer-button:hover,
+  .bom-layer-option:hover, .bom-layer-close:hover, .bom-key-close:hover { background:var(--bom-hover); }
+}
+@media (pointer: coarse) {
+  .card-content { --bom-control-size: 44px; }
+  .bom-key-close { width: 44px; height: 44px; }
+  .bom-layer-option { min-height: 44px; }
+}
 
 /* Loading state */
 .loading-overlay {
@@ -709,7 +811,7 @@ ha-card {
   align-items: center;
   justify-content: center;
   gap: 12px;
-  background: rgba(13, 17, 23, 0.6);
+  background: var(--bom-panel-background);
   pointer-events: none;
   transition: opacity 0.3s;
 }
@@ -719,8 +821,8 @@ ha-card {
 .spinner {
   width: 24px;
   height: 24px;
-  border: 2px solid color-mix(in srgb, var(--bom-ui-accent-color, #F8FAFC) 15%, transparent);
-  border-top-color: var(--bom-ui-accent-color, #F8FAFC);
+  border: 2px solid color-mix(in srgb, var(--bom-text) 15%, transparent);
+  border-top-color: var(--bom-text);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
@@ -728,14 +830,17 @@ ha-card {
   to { transform: rotate(360deg); }
 }
 .loading-text {
-  color: rgba(255, 255, 255, 0.4);
-  font-size: 11px;
+  color: var(--bom-text);
+  font-size: 12px;
   font-weight: 500;
-  letter-spacing: 0.5px;
+  line-height: 1.5;
 }
 .error-text {
-  color: rgba(255, 100, 100, 0.7);
-  font-size: 12px;
+  color: var(--bom-error);
+  font-size: 13px;
+  line-height: 1.5;
+  padding: 16px;
+  text-align: center;
 }
 
 /* Home marker */
@@ -771,15 +876,14 @@ ha-card {
   0% { transform: translate(-50%, -50%) scale(0.8); opacity: 1; }
   100% { transform: translate(-50%, -50%) scale(2); opacity: 0; }
 }
-
-@media (max-width: 480px) {
-  .card-content.has-top-legend .layer-badge {
-    top: 16px;
-  }
-  .card-content.has-top-legend .leaflet-top .leaflet-control {
-    margin-top: 20px;
-  }
+@media (prefers-reduced-motion: reduce) {
+  .card-content.is-idle :is(.leaflet-top.leaflet-right, .controls, .layer-badge, .leaflet-control-attribution) { transition: none; }
+  .play-btn, .frame-dot::after, .loading-overlay,
+  .bom-layer-button, .bom-recenter-button, .leaflet-control-zoom a { transition: none; }
+  .play-btn:active { transform: none; }
+  .marker-dot::after { animation: none; }
 }
+
 `;
 
 function bomTileUrl(layerId, tileMatrixSet, z, col, row, time) {
@@ -863,33 +967,6 @@ function createBomTileLayer(L, layerId, tileMatrixSet, time, options = {}) {
   });
 
   return new BomTileLayer('', options);
-}
-
-function getLegendConfig(layerKey) {
-  const layer = getBomLayerConfig(layerKey);
-  if (!layer || layer.legendType !== 'rainRadar') {
-    return null;
-  }
-
-  return {
-    title: layer.name,
-    unit: layer.unit,
-    gradient: RADAR_LEGEND.gradient,
-    ariaLabel: `${layer.name} legend from light to heavy precipitation`,
-  };
-}
-
-function renderLegendHtml(layerKey) {
-  const legend = getLegendConfig(layerKey);
-  if (!legend) {
-    return '';
-  }
-
-  return `
-    <div class="legend-card" role="note" aria-label="${legend.ariaLabel}">
-      <div class="legend-scale" style="background:${legend.gradient}"></div>
-    </div>
-  `;
 }
 
 function formatLayerTimestamp(layerConfig, timestampValue) {
@@ -1102,7 +1179,12 @@ class BomRadarCard extends HTMLElement {
     this._resizeObserver = null;
     this._visibilityObserver = null;
     this._windowResizeHandler = null;
+    this._windowScrollHandler = null;
+    this._panelPointerHandler = null;
+    this._autoHideControls = null;
     this._layerSwitcher = null;
+    this._legendControl = null;
+    this._legendKeydownHandler = null;
     this._bomReferenceLayers = [];
     this._radarCoverageLayer = null;
     this._labelLayer = null;
@@ -1116,6 +1198,8 @@ class BomRadarCard extends HTMLElement {
   }
 
   connectedCallback() {
+    this._stopThemeObserver?.();
+    this._stopThemeObserver = observeUiTheme(this, () => this._hass);
     this._initIfReady();
   }
 
@@ -1144,6 +1228,7 @@ class BomRadarCard extends HTMLElement {
 
   set hass(hass) {
     this._hass = hass;
+    syncUiTheme(this, hass);
     if (this._restartForAutoBasemapChange()) {
       return;
     }
@@ -1173,10 +1258,13 @@ class BomRadarCard extends HTMLElement {
       enabled_layers: enabledLayers,
       show_marker: config.show_marker !== false,
       show_zoom: config.show_zoom !== false,
+      auto_hide_controls: config.auto_hide_controls === true,
       show_recenter: config.show_recenter !== false,
       show_layer_switcher: config.show_layer_switcher !== false,
       show_playback: config.show_playback !== false,
       show_legend: config.show_legend !== false,
+      show_weather_legend: config.show_weather_legend === true,
+      show_legend_button: config.show_legend_button !== false,
       show_bom_boundaries: config.show_bom_boundaries === true,
       bom_reference_layers: getBomReferenceLayerKeys(config),
       show_radar_coverage: config.show_radar_coverage === true,
@@ -1266,11 +1354,12 @@ class BomRadarCard extends HTMLElement {
     if (this._initialized || !this.isConnected || !this._hass || !this._hasConfig()) return;
     const initToken = ++this._initToken;
     this._initialized = true;
+    loadUiFont();
 
     replaceShadowContentPreservingCardMod(this.shadowRoot, `
       <style>${LEAFLET_CSS}${CARD_CSS}</style>
-      <ha-card style="--bom-card-radius:${this._config.square_style ? '0px' : 'var(--ha-card-border-radius, 12px)'}; --bom-chrome-opacity:${this._config.chrome_opacity}; --bom-ui-accent-color:${this._config.accent_color || DEFAULT_UI_ACCENT_COLOR}; --bom-map-accent-color:${this._config.location_color || `var(--accent-color, ${DEFAULT_ACCENT_COLOR})`}">
-        <div class="card-content${this._config.square_style ? ' is-square' : ''}">
+      <ha-card style="--bom-card-radius:${this._config.square_style ? '0px' : 'var(--ha-card-border-radius, var(--ha-border-radius-lg, 12px))'}; --bom-chrome-opacity:${this._config.chrome_opacity}; --bom-ui-accent-color:${this._config.accent_color || 'var(--bom-default-accent)'}; --bom-map-accent-color:${this._config.location_color || `var(--accent-color, ${DEFAULT_ACCENT_COLOR})`}">
+        <div class="card-content${this._config.square_style ? ' is-square' : ''}${this._config.show_playback ? ' has-playback' : ''}">
           <div id="map" style="height: ${this._config.map_height}px"></div>
           <div class="loading-overlay" id="loading">
             <div class="spinner"></div>
@@ -1278,7 +1367,7 @@ class BomRadarCard extends HTMLElement {
           </div>
           ${this._config.show_playback ? `
           <div class="controls">
-            <button class="play-btn" id="play-btn" aria-label="Play/Pause">${ICON_PAUSE}</button>
+            <button class="play-btn" id="play-btn" type="button" aria-label="Pause animation">${ICON_PAUSE}</button>
             <div class="timeline" id="timeline"></div>
             <span class="time-label" id="time-label">--:--</span>
           </div>` : ''}
@@ -1298,6 +1387,7 @@ class BomRadarCard extends HTMLElement {
         }
         return;
       }
+      this._setupAutoHideControls();
       // Fade out loading overlay
       const loading = this.shadowRoot.getElementById('loading');
       if (loading) {
@@ -1352,6 +1442,10 @@ class BomRadarCard extends HTMLElement {
     if (this._config.show_layer_switcher) {
       this._addLayerSwitcherControl(L);
     }
+    if (this._config.show_legend_button) {
+      this._addLegendControl(L);
+    }
+    this._syncMapToolbar();
 
     // Base tiles (below radar)
     const baseLayerOptions = {
@@ -1404,6 +1498,8 @@ class BomRadarCard extends HTMLElement {
       }
     }
 
+    // Credits can wrap or gain another provider after the base layer is added.
+    this._syncMapToolbar();
     this._setupControls();
     if (this._playing) this._startAnimation();
 
@@ -1412,18 +1508,22 @@ class BomRadarCard extends HTMLElement {
 
     // Pause animation during map interaction
     this._map.on('movestart', () => {
+      this._autoHideControls?.hold('move');
       if (this._playing) this._stopAnimation();
     });
     this._map.on('zoomstart', () => {
+      this._autoHideControls?.hold('zoom');
       this._pendingZoomRebuild = true;
       this._previousDisplayZoom = this._lastRadarDisplayZoom ?? this._map?.getZoom() ?? this._config.zoom_level;
       if (this._playing) this._stopAnimation();
     });
     this._map.on('moveend', () => {
+      this._autoHideControls?.release('move');
       if (this._pendingZoomRebuild) return;
       if (this._playing) this._startAnimation();
     });
     this._map.on('zoomend', async () => {
+      this._autoHideControls?.release('zoom');
       const nextZoom = this._map?.getZoom();
       const previousZoom = this._previousDisplayZoom ?? nextZoom;
 
@@ -1442,11 +1542,14 @@ class BomRadarCard extends HTMLElement {
     // Handle resize
     this._resizeObserver = new ResizeObserver(() => {
       this._scheduleMapResize();
+      this._syncMapToolbar();
       this._fitLayerSwitcherPanel();
     });
     // Leaflet measures clientWidth/clientHeight (the padding box), so observe
     // the border box rather than missing padding-only responsive changes.
     this._resizeObserver.observe(container, { box: 'border-box' });
+    const credits = this.shadowRoot.querySelector('.leaflet-control-attribution');
+    if (credits) this._resizeObserver.observe(credits, { box: 'border-box' });
     if (typeof IntersectionObserver === 'function') {
       this._visibilityObserver = new IntersectionObserver((entries) => {
         if (!entries.some((entry) => entry.isIntersecting)) return;
@@ -1457,9 +1560,24 @@ class BomRadarCard extends HTMLElement {
     }
     this._windowResizeHandler = () => {
       this._scheduleMapResize();
+      this._syncMapToolbar();
       this._fitLayerSwitcherPanel();
     };
     window.addEventListener('resize', this._windowResizeHandler);
+    this._windowScrollHandler = (event) => {
+      const path = event.composedPath();
+      if (!path.includes(this._layerSwitcher?.panel) && !path.includes(this._legendControl?.panel)) this._fitLayerSwitcherPanel();
+    };
+    window.addEventListener('scroll', this._windowScrollHandler, true);
+    window.visualViewport?.addEventListener('resize', this._windowResizeHandler);
+    window.visualViewport?.addEventListener('scroll', this._windowScrollHandler);
+    this._panelPointerHandler = event => {
+      const path = event.composedPath();
+      if (!path.includes(this._layerSwitcher?.panel) && !path.includes(this._layerSwitcher?.button)) this._closeLayerSwitcher();
+      if (!path.includes(this._legendControl?.panel) && !path.includes(this._legendControl?.button) &&
+        !path.includes(this.shadowRoot.querySelector('.legend-open'))) this._closeLegendPanel();
+    };
+    window.addEventListener('pointerdown', this._panelPointerHandler);
     this._scheduleMapResize();
   }
 
@@ -1478,6 +1596,26 @@ class BomRadarCard extends HTMLElement {
     } else {
       setTimeout(resize, 0);
     }
+  }
+
+  _setupAutoHideControls() {
+    this._autoHideControls?.destroy();
+    this._autoHideControls = null;
+    if (!this._config.auto_hide_controls) return;
+    const content = this.shadowRoot.querySelector('.card-content');
+    const toolbar = this.shadowRoot.querySelector('.leaflet-top.leaflet-right');
+    this._autoHideControls = createAutoHideControls({
+      content,
+      windowTarget: window,
+      getActiveElement: () => this.shadowRoot.activeElement,
+      // Pointer taps leave DOM focus behind too. Only keyboard-visible focus
+      // should prevent idle hiding once the pointer interaction has finished.
+      isControlFocused: element => element?.matches(':focus-visible') && (toolbar?.contains(element) ||
+        content.querySelector('.controls')?.contains(element) ||
+        content.querySelector('.leaflet-control-attribution')?.contains(element)),
+      isPanelOpen: () => this._layerSwitcher?.panel.classList.contains('is-open') ||
+        Boolean(this._legendControl && !this._legendControl.panel.hidden),
+    });
   }
 
   _addBomReferenceLayers(L) {
@@ -1567,26 +1705,49 @@ class BomRadarCard extends HTMLElement {
     control.onAdd = () => {
       const container = L.DomUtil.create('div', 'leaflet-control bom-layer-control');
       const button = L.DomUtil.create('button', 'bom-layer-button', container);
-      const panel = L.DomUtil.create('div', 'bom-layer-panel', container);
+      const content = this.shadowRoot.querySelector('.card-content');
+      const panel = L.DomUtil.create('section', 'bom-layer-panel', content);
 
       button.type = 'button';
       button.innerHTML = ICON_LAYERS;
       button.title = 'Choose weather layer';
       button.setAttribute('aria-label', 'Choose weather layer');
-      button.setAttribute('aria-haspopup', 'true');
+      button.setAttribute('aria-controls', 'bom-layer-menu');
       button.setAttribute('aria-expanded', 'false');
+      panel.id = 'bom-layer-menu';
+      panel.setAttribute('role', 'region');
+      panel.setAttribute('aria-labelledby', 'bom-layer-title');
+      const header = L.DomUtil.create('div', 'bom-layer-header', panel);
+      const title = L.DomUtil.create('h2', 'bom-layer-title', header);
+      title.id = 'bom-layer-title';
+      title.textContent = 'Weather layers';
+      const groups = getGroupedLayerEntries(this._config.enabled_layers || DEFAULT_ENABLED_LAYERS);
+      const count = L.DomUtil.create('span', 'bom-layer-count', header);
+      count.textContent = `${groups.reduce((total, group) => total + group.entries.length, 0)} available`;
+      const close = L.DomUtil.create('button', 'bom-layer-close', header);
+      close.type = 'button';
+      close.textContent = '×';
+      close.setAttribute('aria-label', 'Close weather layers');
+      close.addEventListener('click', () => this._closeLayerSwitcher(true));
+      const body = L.DomUtil.create('div', 'bom-layer-body', panel);
+      body.tabIndex = 0;
+      body.setAttribute('role', 'region');
+      body.setAttribute('aria-label', 'Available weather layers');
 
-      getGroupedLayerEntries(this._config.enabled_layers || DEFAULT_ENABLED_LAYERS).forEach(({ groupName, entries }) => {
-        const group = L.DomUtil.create('div', 'bom-layer-group', panel);
+      groups.forEach(({ groupName, entries }) => {
+        const section = L.DomUtil.create('section', 'bom-layer-section', body);
+        const group = L.DomUtil.create('h3', 'bom-layer-group', section);
         group.textContent = groupName;
+        const grid = L.DomUtil.create('div', 'bom-layer-grid', section);
 
         entries.forEach(([key, layer]) => {
-          const option = L.DomUtil.create('button', 'bom-layer-option', panel);
+          const option = L.DomUtil.create('button', 'bom-layer-option', grid);
           option.type = 'button';
           option.dataset.layer = key;
           option.innerHTML = `
             <span class="bom-layer-option-name">${layer.name}</span>
-            <span class="bom-layer-option-unit">${layer.unit}</span>
+            <span class="bom-layer-option-unit">${['icon', 'level'].includes(layer.unit) ? 'Categories' : layer.unit === 'deg' ? 'Direction' : layer.unit}</span>
+            <svg class="bom-layer-selected" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 8 3 3 7-7"/></svg>
           `;
           L.DomEvent.on(option, 'click', async (ev) => {
             L.DomEvent.stop(ev);
@@ -1597,20 +1758,42 @@ class BomRadarCard extends HTMLElement {
 
       const togglePanel = (ev) => {
         L.DomEvent.stop(ev);
-        const isOpen = !panel.classList.contains('is-open');
-        panel.classList.toggle('is-open', isOpen);
-        button.classList.toggle('is-open', isOpen);
-        button.setAttribute('aria-expanded', String(isOpen));
-        if (isOpen) {
-          this._fitLayerSwitcherPanel();
+        if (panel.classList.contains('is-open')) {
+          this._closeLayerSwitcher(true);
+          return;
         }
+        this._closeLegendPanel();
+        panel.classList.add('is-open');
+        this._autoHideControls?.activity();
+        button.classList.add('is-open');
+        button.setAttribute('aria-expanded', 'true');
+        this._fitLayerSwitcherPanel();
+        const selected = panel.querySelector('.is-active');
+        if (selected) {
+          const optionRect = selected.getBoundingClientRect();
+          const bodyRect = body.getBoundingClientRect();
+          if (optionRect.top < bodyRect.top || optionRect.bottom > bodyRect.bottom) {
+            body.scrollTop += optionRect.top - bodyRect.top - 4;
+          }
+          selected.focus({ preventScroll: true });
+        } else close.focus({ preventScroll: true });
       };
 
       L.DomEvent.disableClickPropagation(container);
       L.DomEvent.disableScrollPropagation(container);
+      L.DomEvent.disableClickPropagation(panel);
+      L.DomEvent.disableScrollPropagation(panel);
       L.DomEvent.on(button, 'click', togglePanel);
+      const onEscape = (event) => {
+        if (event.key === 'Escape' && panel.classList.contains('is-open')) {
+          event.stopPropagation();
+          this._closeLayerSwitcher(true);
+        }
+      };
+      container.addEventListener('keydown', onEscape);
+      panel.addEventListener('keydown', onEscape);
 
-      this._layerSwitcher = { button, panel };
+      this._layerSwitcher = { button, panel, body, close };
       this._syncLayerSwitcherState();
       return container;
     };
@@ -1624,51 +1807,280 @@ class BomRadarCard extends HTMLElement {
       : this._config.layer;
   }
 
+  _addLegendControl(L) {
+    const createButton = (container) => {
+      const button = L.DomUtil.create('button', 'bom-layer-button bom-key-button', container);
+      button.type = 'button';
+      button.innerHTML = ICON_COLOUR_KEY;
+      button.title = 'Show colour key';
+      button.setAttribute('aria-label', 'Show colour key');
+      button.setAttribute('aria-expanded', 'false');
+      button.setAttribute('aria-controls', 'bom-colour-key');
+      const content = this.shadowRoot.querySelector('.card-content');
+      const panel = L.DomUtil.create('section', 'bom-key-panel', content);
+      panel.id = 'bom-colour-key';
+      panel.hidden = true;
+      panel.setAttribute('role', 'region');
+      panel.setAttribute('aria-labelledby', 'bom-colour-key-title');
+      const header = L.DomUtil.create('div', 'bom-key-header', panel);
+      const title = L.DomUtil.create('h2', 'bom-key-title', header);
+      title.id = 'bom-colour-key-title';
+      const close = L.DomUtil.create('button', 'bom-key-close', header);
+      close.type = 'button';
+      close.textContent = '×';
+      close.setAttribute('aria-label', 'Close colour key');
+      const body = L.DomUtil.create('div', 'bom-key-body', panel);
+      body.tabIndex = 0;
+      body.setAttribute('role', 'region');
+      body.setAttribute('aria-label', 'Colour ranges');
+      this._legendControl = { button, panel, title, close, body, layerKey: null };
+      L.DomEvent.disableClickPropagation(container);
+      L.DomEvent.disableScrollPropagation(container);
+      L.DomEvent.disableClickPropagation(panel);
+      L.DomEvent.disableScrollPropagation(panel);
+      button.addEventListener('click', () => this._toggleLegendPanel(button));
+      close.addEventListener('click', () => this._closeLegendPanel(true));
+      const onEscape = (event) => {
+        if (event.key === 'Escape' && !panel.hidden) {
+          event.stopPropagation();
+          this._closeLegendPanel(true);
+        }
+      };
+      this._legendKeydownHandler = onEscape;
+      this.shadowRoot.addEventListener('keydown', onEscape);
+      this._syncLegendControl();
+      return button;
+    };
+    const cluster = this._layerSwitcher?.button.parentNode;
+    if (cluster) {
+      cluster.classList.add('bom-key-cluster');
+      const button = createButton(cluster);
+      cluster.insertBefore(button, this._layerSwitcher.button);
+    } else {
+      const control = L.control({ position: 'topright' });
+      control.onAdd = () => {
+        const container = L.DomUtil.create('div', 'leaflet-control');
+        createButton(container);
+        return container;
+      };
+      control.addTo(this._map);
+    }
+    this._map.on('click movestart zoomstart', () => this._closeLegendPanel());
+  }
+
+  _syncLegendControl() {
+    if (!this._legendControl) return;
+    const { button, panel, title, body } = this._legendControl;
+    const layerKey = this._getDisplayedRadarLayerKey();
+    const legend = getLegendConfig(layerKey);
+    const hadFocus = button === this.shadowRoot.activeElement || panel.contains(this.shadowRoot.activeElement);
+    if (!legend) this._closeLegendPanel();
+    button.hidden = !legend;
+    if (!legend && hadFocus) (this._layerSwitcher?.button || this.shadowRoot.getElementById('map'))?.focus();
+    if (!legend || this._legendControl.layerKey === layerKey) return;
+    title.textContent = `${legend.title}${legend.kind === 'categorical' ? '' : ` (${legend.unit})`}`;
+    body.innerHTML = renderLegendBandsHtml(layerKey);
+    body.scrollTop = 0;
+    panel.dataset.layer = layerKey;
+    this._legendControl.layerKey = layerKey;
+  }
+
+  _syncMapToolbar() {
+    const toolbar = this.shadowRoot.querySelector('.leaflet-top.leaflet-right');
+    if (!toolbar) {
+      this._syncLayerBadgeVisibility();
+      return;
+    }
+    toolbar.hidden = !(this._config.show_zoom || this._config.show_recenter ||
+      this._config.show_layer_switcher || (this._legendControl && !this._legendControl.button.hidden));
+    const content = this.shadowRoot.querySelector('.card-content');
+    const controls = (this._config.show_zoom ? 2 : 0) + (this._config.show_recenter ? 1 : 0) +
+      (this._config.show_layer_switcher ? 1 : 0) + (this._legendControl && !this._legendControl.button.hidden ? 1 : 0);
+    const size = window.matchMedia?.('(pointer: coarse)').matches ? 44 : 36;
+    const bounds = content.getBoundingClientRect();
+    const { top, bottom } = bounds;
+    const width = bounds.width || bounds.right - bounds.left || content.clientWidth;
+    // Flatten grouped buttons into a grid on short cards, retaining full touch
+    // targets while wrapping instead of extending off a narrow card's left edge.
+    const maxColumns = Math.max(1, Math.floor((width - 22) / size));
+    const rows = Math.ceil(controls / maxColumns);
+    const columns = Math.max(1, Math.ceil(controls / Math.max(1, rows)));
+    content.style.setProperty('--bom-toolbar-columns', String(columns));
+    content.style.setProperty('--bom-toolbar-height', `${rows * size + 6}px`);
+    const topInset = content.classList.contains('has-top-legend') ? 14 : 8;
+    const creditHeight = this.shadowRoot.querySelector('.leaflet-control-attribution')?.getBoundingClientRect().height || 18;
+    const bottomInset = this._config.show_attribution
+      ? (this._config.show_playback ? size + 16 : 0) + creditHeight + 16
+      : this._config.show_playback ? size + 16 : 8;
+    content.classList.toggle('has-short-toolbar', controls * size + 6 > bottom - top - topInset - bottomInset);
+    this._syncLayerBadgeVisibility();
+  }
+
+  _syncLayerBadgeVisibility() {
+    const content = this.shadowRoot.querySelector('.card-content');
+    if (!content) return;
+    const badge = content.querySelector('.layer-badge');
+    if (!badge) {
+      content.classList.remove('has-crowded-label');
+      return;
+    }
+    // Visibility preserves the label's box while hidden, so repeated observer
+    // callbacks make the same decision until the actual available space changes.
+    const label = badge.getBoundingClientRect();
+    const card = content.getBoundingClientRect();
+    let crowded = label.left < card.left || label.right > card.right ||
+      label.top < card.top || label.bottom > card.bottom;
+    for (const selector of ['.leaflet-top.leaflet-right', '.controls', '.leaflet-control-attribution']) {
+      const control = content.querySelector(selector);
+      if (!control || control.hidden) continue;
+      const bounds = control.getBoundingClientRect();
+      if (bounds.right <= bounds.left || bounds.bottom <= bounds.top) continue;
+      // Reserve playback space even while a panel temporarily covers it. This
+      // keeps the decision stable through panel open/close and idle fading.
+      if (label.left < bounds.right + 4 && label.right + 4 > bounds.left &&
+        label.top < bounds.bottom + 4 && label.bottom + 4 > bounds.top) crowded = true;
+    }
+    content.classList.toggle('has-crowded-label', crowded);
+  }
+
+  _closeLegendPanel(restoreFocus = false) {
+    if (!this._legendControl) return;
+    const { button, panel } = this._legendControl;
+    const wasOpen = !panel.hidden;
+    if (!panel.hidden && (restoreFocus || panel.contains(this.shadowRoot.activeElement))) {
+      const trigger = this.shadowRoot.contains(this._legendControl.trigger) ? this._legendControl.trigger : button;
+      trigger.focus({ preventScroll: true });
+    }
+    this._legendControl.trigger = null;
+    panel.hidden = true;
+    if (wasOpen) this._autoHideControls?.activity();
+    this._syncLegendExpandedState();
+    this._fitLayerSwitcherPanel();
+  }
+
+  _toggleLegendPanel(trigger) {
+    if (!this._legendControl) return;
+    const { button, panel, close } = this._legendControl;
+    if (!panel.hidden) {
+      this._closeLegendPanel(true);
+      return;
+    }
+    this._syncLegendControl();
+    if (button.hidden) return;
+    this._closeLayerSwitcher();
+    this._legendControl.trigger = trigger;
+    panel.hidden = false;
+    this._autoHideControls?.activity();
+    this._fitLayerSwitcherPanel();
+    this._syncLegendExpandedState();
+    close.focus({ preventScroll: true });
+  }
+
+  _syncLegendExpandedState() {
+    if (!this._legendControl) return;
+    const { button, panel } = this._legendControl;
+    const isOpen = !panel.hidden;
+    button.classList.toggle('is-open', isOpen);
+    button.setAttribute('aria-expanded', String(isOpen));
+    button.setAttribute('aria-label', isOpen ? 'Hide colour key' : 'Show colour key');
+    button.title = isOpen ? 'Hide colour key' : 'Show colour key';
+    this.shadowRoot.querySelector('.legend-open')?.setAttribute('aria-expanded', String(isOpen));
+  }
+
   _renderTopOverlays() {
     const content = this.shadowRoot.querySelector('.card-content');
     const map = this.shadowRoot.getElementById('map');
     if (!content || !map) return;
 
     content.querySelector('.layer-badge')?.remove();
-    content.querySelector('.legend-card')?.remove();
+    const previousLegend = content.querySelector('.legend-card');
 
     const displayedLayerKey = this._getDisplayedRadarLayerKey();
+    this._syncLegendControl();
     const layerConfig = getBomLayerConfig(displayedLayerKey) || BOM_LAYERS.reflectivity;
-    const legendConfig = this._config.show_legend ? getLegendConfig(displayedLayerKey) : null;
+    const legendConfig = getLegendConfig(displayedLayerKey);
+    const showLegend = Boolean(legendConfig && (legendConfig.kind === 'radar'
+      ? this._config.show_legend : this._config.show_weather_legend));
 
-    content.classList.toggle('has-top-legend', Boolean(legendConfig));
+    content.classList.toggle('has-top-legend', showLegend);
+    this._syncMapToolbar();
 
     if (this._config.show_layer_label) {
       map.insertAdjacentHTML('beforebegin', `<div class="layer-badge">${layerConfig.name}</div>`);
     }
-    if (legendConfig) {
+    // All products use the same strip node and CSS; refreshes need no new node.
+    if (!showLegend || previousLegend?.dataset.layer !== displayedLayerKey) previousLegend?.remove();
+    if (showLegend && !content.querySelector('.legend-card')) {
       map.insertAdjacentHTML('beforebegin', renderLegendHtml(displayedLayerKey));
     }
+    // The first strip renders before the map controls exist. Wire its trigger
+    // independently of palette changes so initialization and reconnect work too.
+    if (showLegend && this._legendControl) {
+      const strip = content.querySelector('.legend-card');
+      if (!strip.querySelector('.legend-open')) {
+        const trigger = document.createElement('button');
+        trigger.type = 'button';
+        trigger.className = 'legend-open';
+        trigger.setAttribute('aria-label', `Show ${legendConfig.title} colour key`);
+        trigger.setAttribute('aria-controls', 'bom-colour-key');
+        trigger.setAttribute('aria-expanded', String(!this._legendControl.panel.hidden));
+        trigger.addEventListener('click', () => this._toggleLegendPanel(trigger));
+        strip.setAttribute('role', 'group');
+        strip.appendChild(trigger);
+        if (this._legendControl.trigger?.classList.contains('legend-open')) this._legendControl.trigger = trigger;
+      }
+      this._syncLegendExpandedState();
+    }
+    this._syncLayerBadgeVisibility();
   }
 
-  _closeLayerSwitcher() {
+  _closeLayerSwitcher(restoreFocus = false) {
     if (!this._layerSwitcher) return;
+    const wasOpen = this._layerSwitcher.panel.classList.contains('is-open');
+    if (this._layerSwitcher.panel.classList.contains('is-open') &&
+      (restoreFocus || this._layerSwitcher.panel.contains(this.shadowRoot.activeElement))) {
+      this._layerSwitcher.button.focus({ preventScroll: true });
+    }
     this._layerSwitcher.panel.classList.remove('is-open');
+    if (wasOpen) this._autoHideControls?.activity();
     this._layerSwitcher.button.classList.remove('is-open');
     this._layerSwitcher.button.setAttribute('aria-expanded', 'false');
-    this._layerSwitcher.panel.style.removeProperty('max-height');
-    this._layerSwitcher.panel.style.removeProperty('max-width');
+    this._fitLayerSwitcherPanel();
   }
 
   _fitLayerSwitcherPanel() {
-    if (!this._layerSwitcher?.panel?.classList.contains('is-open')) return;
-
+    const panels = [];
+    if (this._layerSwitcher?.panel.classList.contains('is-open')) panels.push(this._layerSwitcher.panel);
+    if (this._legendControl && !this._legendControl.panel.hidden) panels.push(this._legendControl.panel);
     const content = this.shadowRoot.querySelector('.card-content');
-    const { panel } = this._layerSwitcher;
-    if (!content || !panel) return;
+    if (!content) return;
+    if (!panels.length) {
+      content.classList.remove('panel-covers-playback');
+      return;
+    }
 
-    const contentRect = content.getBoundingClientRect();
-    const panelRect = panel.getBoundingClientRect();
-    const availableHeight = Math.max(160, Math.floor(contentRect.bottom - panelRect.top - 8));
-    const availableWidth = Math.max(156, Math.min(210, Math.floor(contentRect.width - 52)));
-
-    panel.style.maxHeight = `${availableHeight}px`;
-    panel.style.maxWidth = `${availableWidth}px`;
+    const visual = window.visualViewport;
+    const left = visual?.offsetLeft ?? 0;
+    const top = visual?.offsetTop ?? 0;
+    const layout = {
+      card: content.getBoundingClientRect(),
+      viewport: { left, top, right: left + (visual?.width ?? window.innerWidth), bottom: top + (visual?.height ?? window.innerHeight) },
+      topInset: content.classList.contains('has-top-legend') ? 14 : 8,
+      bottomInset: this._config.show_playback ? 64 : 8,
+    };
+    let bounds = getLayerPickerBounds(layout);
+    // Keep a readable row beneath the fixed header on short/partly visible cards.
+    // Playback returns as soon as the panel closes.
+    const coverPlayback = this._config.show_playback && bounds.maxHeight < 140;
+    if (coverPlayback) bounds = getLayerPickerBounds({ ...layout, bottomInset: 8 });
+    content.classList.toggle('panel-covers-playback', coverPlayback);
+    for (const panel of panels) {
+      panel.style.left = `${bounds.left}px`;
+      panel.style.top = `${bounds.top}px`;
+      panel.style.width = `${bounds.width}px`;
+      panel.style.maxHeight = `${bounds.maxHeight}px`;
+      panel.style.setProperty('--bom-layer-columns', String(bounds.columns));
+    }
   }
 
   _syncLayerSwitcherState() {
@@ -1836,6 +2248,7 @@ class BomRadarCard extends HTMLElement {
       playBtn.addEventListener('click', () => {
         this._playing = !this._playing;
         playBtn.innerHTML = this._playing ? ICON_PAUSE : ICON_PLAY;
+        playBtn.setAttribute('aria-label', this._playing ? 'Pause animation' : 'Play animation');
         if (this._playing) {
           this._startAnimation();
         } else {
@@ -1856,13 +2269,17 @@ class BomRadarCard extends HTMLElement {
       const dot = document.createElement('button');
       dot.className = 'frame-dot' + (i === this._currentFrame ? ' active' : i < this._currentFrame ? ' past' : '');
       dot.type = 'button';
+      dot.setAttribute('aria-pressed', String(i === this._currentFrame));
       dot.setAttribute('aria-label', `Show ${formatLayerTimestamp(layerConfig, this._timestamps[i])}`);
       dot.addEventListener('click', () => {
         this._stopAnimation();
         this._showFrame(i);
         this._playing = false;
         const playBtn = this.shadowRoot.getElementById('play-btn');
-        if (playBtn) playBtn.innerHTML = ICON_PLAY;
+        if (playBtn) {
+          playBtn.innerHTML = ICON_PLAY;
+          playBtn.setAttribute('aria-label', 'Play animation');
+        }
       });
       timeline.appendChild(dot);
     }
@@ -1885,6 +2302,7 @@ class BomRadarCard extends HTMLElement {
     const dots = this.shadowRoot.querySelectorAll('.frame-dot');
     dots.forEach((dot, i) => {
       dot.className = 'frame-dot' + (i === this._currentFrame ? ' active' : i < this._currentFrame ? ' past' : '');
+      dot.setAttribute('aria-pressed', String(i === this._currentFrame));
     });
   }
 
@@ -1926,9 +2344,19 @@ class BomRadarCard extends HTMLElement {
   }
 
   _cleanupMap() {
+    this._autoHideControls?.destroy();
+    this._autoHideControls = null;
     this._radarLoadToken += 1;
     this._stopAnimation();
     this._closeLayerSwitcher();
+    this._layerSwitcher?.panel.remove();
+    this._closeLegendPanel();
+    this._legendControl?.panel.remove();
+    this._legendControl = null;
+    if (this._legendKeydownHandler) {
+      this.shadowRoot.removeEventListener('keydown', this._legendKeydownHandler);
+      this._legendKeydownHandler = null;
+    }
     if (this._updateTimer) {
       clearInterval(this._updateTimer);
       this._updateTimer = null;
@@ -1943,7 +2371,17 @@ class BomRadarCard extends HTMLElement {
     }
     if (this._windowResizeHandler) {
       window.removeEventListener('resize', this._windowResizeHandler);
+      window.visualViewport?.removeEventListener('resize', this._windowResizeHandler);
       this._windowResizeHandler = null;
+    }
+    if (this._windowScrollHandler) {
+      window.removeEventListener('scroll', this._windowScrollHandler, true);
+      window.visualViewport?.removeEventListener('scroll', this._windowScrollHandler);
+      this._windowScrollHandler = null;
+    }
+    if (this._panelPointerHandler) {
+      window.removeEventListener('pointerdown', this._panelPointerHandler);
+      this._panelPointerHandler = null;
     }
     if (this._lightning) {
       this._lightning.destroy();
@@ -1964,6 +2402,8 @@ class BomRadarCard extends HTMLElement {
   }
 
   disconnectedCallback() {
+    this._stopThemeObserver?.();
+    this._stopThemeObserver = null;
     this._initToken += 1;
     this._cleanupMap();
     this._initialized = false;
@@ -1976,11 +2416,24 @@ class BomRadarCardEditor extends HTMLElement {
   constructor() {
     super();
     this.attachShadow({ mode: 'open' });
+    this._openSections = new Set(['map']);
+    loadUiFont();
+  }
+
+  connectedCallback() {
+    this._stopObservingTheme?.();
+    this._stopObservingTheme = observeUiTheme(this, () => this._hass);
+  }
+
+  disconnectedCallback() {
+    this._stopObservingTheme?.();
+    this._stopObservingTheme = null;
   }
 
   set hass(hass) {
     const wasLoaded = this._blitzLoaded;
     this._hass = hass;
+    syncUiTheme(this, hass);
     this._blitzLoaded = isBlitzortungLoaded(hass);
     if (this._config && this._blitzLoaded !== wasLoaded) {
       this._render();
@@ -1994,6 +2447,14 @@ class BomRadarCardEditor extends HTMLElement {
 
   _render() {
     const cfg = this._config;
+    syncUiTheme(this, this._hass);
+    const focusedId = this.shadowRoot.activeElement?.id;
+    const layersScrollTop = this.shadowRoot.querySelector('.layer-list')?.scrollTop || 0;
+    this.shadowRoot.querySelectorAll('details[data-section]').forEach(section => {
+      const name = section.getAttribute('data-section');
+      if (section.open) this._openSections.add(name);
+      else this._openSections.delete(name);
+    });
     const basemapProvider = getBasemapProvider(cfg);
     const basemapStyle = getConfiguredBasemapStyle(cfg, basemapProvider);
     const basemapApiKey = basemapProvider === 'carto'
@@ -2003,104 +2464,115 @@ class BomRadarCardEditor extends HTMLElement {
     const groupedLayers = getGroupedLayerEntries(enabledLayerKeys);
     const bomReferenceLayerKeys = getBomReferenceLayerKeys(cfg);
     const activeEditorLayer = enabledLayerKeys.includes(cfg.layer) ? cfg.layer : enabledLayerKeys[0] || 'reflectivity';
+    const layerOptionLabel = layer => `${layer.name}${layer.unit && !['icon', 'level'].includes(layer.unit) ? ` (${layer.unit === 'deg' ? '°' : layer.unit})` : ''}`;
+    const rainfallForecastSelected = activeEditorLayer.startsWith('forecast_rain_');
     const radarCoverageAvailable = supportsRadarCoverageLayer(activeEditorLayer);
     const blitzLoaded = isBlitzortungLoaded(this._hass);
     const additionalBomReferenceLayers = Object.entries(BOM_REFERENCE_OVERLAY_STYLES)
       .filter(([key]) => key !== 'state_borders');
     this.shadowRoot.innerHTML = `
       <style>
-        .editor { padding:16px; }
-        .section { margin-bottom:14px; }
-        .section-title { font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.8px; color:var(--secondary-text-color); margin-bottom:8px; }
-        .row { margin-bottom:8px; }
-        .row-inline { display:flex; gap:12px; }
-        .row-inline>.row { flex:1; }
-        label { display:block; font-size:12px; font-weight:500; margin-bottom:4px; color:var(--primary-text-color); }
-        select,input[type="number"] { width:100%; padding:8px 10px; border:1px solid var(--divider-color); border-radius:10px; background:var(--card-background-color); color:var(--primary-text-color); font-size:14px; box-sizing:border-box; }
-        input[type="password"] { width:100%; padding:8px 10px; border:1px solid var(--divider-color); border-radius:10px; background:var(--card-background-color); color:var(--primary-text-color); font-size:14px; box-sizing:border-box; }
-        input[type="color"] { width:100%; height:40px; padding:4px; border:1px solid var(--divider-color); border-radius:10px; background:var(--card-background-color); box-sizing:border-box; }
-        select:focus-visible,input:focus-visible { outline:2px solid var(--accent-color, #00BCD4); outline-offset:1px; border-color:var(--accent-color, #00BCD4); }
-        .toggle-row { display:flex; align-items:center; justify-content:space-between; padding:4px 0; }
-        .toggle-label { font-size:13px; color:var(--primary-text-color); }
-        .toggle { position:relative; width:36px; height:20px; flex-shrink:0; }
-        .toggle input { opacity:0; width:0; height:0; }
-        .toggle-slider { position:absolute; cursor:pointer; inset:0; background:rgba(255,255,255,0.12); border-radius:10px; transition:background 0.2s; }
-        .toggle-slider::before { position:absolute; content:''; height:16px; width:16px; left:2px; bottom:2px; background:#fff; border-radius:50%; transition:transform 0.2s; }
-        .toggle input:focus-visible+.toggle-slider { box-shadow:0 0 0 2px var(--accent-color, #00BCD4); }
-        .toggle input:checked+.toggle-slider { background:var(--accent-color, #00BCD4); }
-        .toggle input:checked+.toggle-slider::before { transform:translateX(16px); }
-        .help-text { margin-top:6px; font-size:11px; line-height:1.4; color:var(--secondary-text-color); }
-        .layer-list { max-height:320px; overflow:auto; padding:2px 2px 0; }
-        .layer-group-title { margin:12px 0 4px; font-size:10px; font-weight:700; letter-spacing:0.08em; text-transform:uppercase; color:var(--secondary-text-color); }
-        .layer-group-title:first-child { margin-top:0; }
+        ${UI_THEME_CSS}
+        :host {
+          --editor-text:var(--bom-text);
+          --editor-muted:var(--bom-muted);
+          --editor-border:var(--bom-border);
+          --editor-field:var(--input-fill-color,var(--bom-hover));
+          --editor-switch-off:#78838f;
+          --editor-switch-on-thumb:#fff;
+          --editor-accent:var(--primary-color,#1976d2);
+          --editor-link:var(--primary-color,#1565c0);
+          display:block; min-width:0; color:var(--editor-text);
+          font-family:var(--bom-font-family);
+          font-size:14px; line-height:1.5; -webkit-font-smoothing:antialiased;
+          container-type:inline-size;
+        }
+        :host([data-theme="dark"]) {
+          --editor-accent:var(--primary-color,#64b5f6);
+          --editor-link:var(--primary-color,#90caf9);
+          --editor-switch-on-thumb:var(--bom-surface);
+        }
+        *,*::before,*::after { box-sizing:border-box; }
+        .editor { padding:8px 0; }
+        .section { min-width:0; padding:18px 4px; border-bottom:1px solid var(--editor-border); }
+        .section:first-child { padding-top:0; }
+        .section:last-child { border-bottom:0; }
+        .section-title { margin:0 0 12px; font-size:16px; font-weight:600; line-height:1.4; letter-spacing:-.02em; }
+        details.section { padding:0 4px; }
+        summary { display:flex; align-items:center; gap:16px; min-height:64px; padding:14px 0; cursor:pointer; list-style:none; }
+        summary::-webkit-details-marker { display:none; }
+        summary::after { content:''; width:7px; height:7px; flex:none; margin:0 4px 0 auto; border-right:1.5px solid var(--editor-muted); border-bottom:1.5px solid var(--editor-muted); transform:rotate(45deg); }
+        details[open]>summary::after { transform:rotate(225deg); }
+        summary .section-title { display:block; margin:0; font-size:15px; }
+        .section-description { display:block; margin-top:3px; color:var(--editor-muted); font-size:12px; font-weight:400; line-height:1.4; }
+        .section-content { padding:2px 0 20px; }
+        .map-details { margin:0 0 16px; }
+        .map-details>summary { min-height:44px; padding:8px 0; font-size:13px; font-weight:500; }
+        .row { margin-bottom:16px; min-width:0; }
+        .row:last-child { margin-bottom:0; }
+        .row[hidden] { display:none; }
+        .row-inline { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+        label,.field-label { display:block; margin:0 0 6px; color:var(--editor-text); font-size:13px; font-weight:500; }
+        select,input[type="number"],input[type="password"] { width:100%; min-width:0; min-height:44px; padding:10px 12px; border:1px solid var(--editor-border); border-radius:8px; background:var(--editor-field); color:var(--editor-text); font:inherit; font-size:14px; }
+        select { padding-right:28px; text-overflow:ellipsis; }
+        input[type="number"] { font-variant-numeric:tabular-nums; }
+        input::placeholder { color:var(--editor-muted); opacity:1; }
+        input:disabled { opacity:.6; }
+        input[type="color"] { width:100%; height:44px; padding:5px; border:1px solid var(--editor-border); border-radius:8px; background:var(--editor-field); cursor:pointer; }
+        select:focus-visible,input:focus-visible,summary:focus-visible,a:focus-visible { outline:2px solid var(--editor-accent); outline-offset:3px; }
+        .toggle-row { position:relative; display:flex; align-items:center; justify-content:space-between; min-height:44px; gap:20px; margin:0; padding:8px 0; cursor:pointer; font-weight:400; }
+        .toggle-label { min-width:0; color:var(--editor-text); font-size:14px; line-height:1.45; }
+        .toggle { position:relative; display:block; width:40px; height:24px; flex:none; }
+        .toggle input { position:absolute; z-index:1; inset:-10px -2px; width:44px; height:44px; margin:0; opacity:0; cursor:pointer; }
+        .toggle-slider { position:absolute; inset:0; background:var(--editor-switch-off); border-radius:12px; }
+        .toggle-slider::before { position:absolute; content:''; height:18px; width:18px; left:3px; top:3px; background:#fff; border-radius:50%; box-shadow:0 1px 2px #0003; }
+        .toggle input:focus-visible+.toggle-slider { outline:2px solid var(--editor-accent); outline-offset:3px; }
+        .toggle input:checked+.toggle-slider { background:var(--editor-accent); }
+        .toggle input:checked+.toggle-slider::before { transform:translateX(16px); background:var(--editor-switch-on-thumb); }
+        .help-text { margin:6px 0 12px; color:var(--editor-muted); font-size:12px; line-height:1.55; overflow-wrap:anywhere; }
+        .help-text:last-child { margin-bottom:0; }
+        .help-text a { color:var(--editor-link); text-underline-offset:2px; }
+        .layer-list { max-height:360px; overflow:auto; overscroll-behavior:contain; scrollbar-gutter:stable; padding:2px 8px 2px 4px; border:1px solid var(--editor-border); border-radius:8px; }
+        .layer-group-title { margin:16px 0 4px; padding:0 0 5px; border-bottom:1px solid var(--editor-border); color:var(--editor-muted); font-size:12px; font-weight:600; line-height:1.5; }
+        .layer-group-title:first-child { margin-top:8px; }
+        @container (max-width:340px) {
+          .row-inline { grid-template-columns:1fr; gap:0; }
+          select,input[type="number"],input[type="password"] { font-size:16px; }
+        }
       </style>
       <div class="editor">
         <div class="section">
-          <div class="section-title">Weather Layer</div>
+          <h2 class="section-title">Weather layer</h2>
           <div class="row">
-            <label>Layer</label>
-            <select id="layer">
+            <label for="layer">Default layer</label>
+            <select id="layer" ${rainfallForecastSelected ? 'aria-describedby="forecast-rain-help"' : ''}>
               ${groupedLayers.map(({ groupName, entries }) => {
                 const options = entries.map(([key, val]) =>
-                  `<option value="${key}" ${cfg.layer === key ? 'selected' : ''}>${val.name} (${val.unit})</option>`
+                  `<option value="${key}" ${activeEditorLayer === key ? 'selected' : ''}>${layerOptionLabel(val)}</option>`
                 ).join('');
                 return `<optgroup label="${groupName}">${options}</optgroup>`;
               }).join('')}
             </select>
+            ${rainfallForecastSelected ? '<div class="help-text" id="forecast-rain-help">Forecast rainfall amounts marked 50%, 25% or 10% show the chance of exceeding that amount. Chance of rain layers show whether rain is likely.</div>' : ''}
           </div>
           <div class="row-inline">
             <div class="row">
-              <label>Overlay Opacity</label>
-              <input type="number" id="radar_opacity" min="0.1" max="1" step="0.1" value="${escapeHtml(cfg.radar_opacity || 0.7)}">
+              <label for="radar_opacity">Weather opacity (%)</label>
+              <input type="number" id="radar_opacity" min="10" max="100" step="5" value="${escapeHtml(Number(((cfg.radar_opacity || 0.7) * 100).toFixed(6)))}">
             </div>
             <div class="row">
-              <label>Chrome Opacity</label>
-              <input type="number" id="chrome_opacity" min="0.2" max="1" step="0.1" value="${escapeHtml(cfg.chrome_opacity ?? 1)}">
-            </div>
-            <div class="row">
-              <label>Frames</label>
-              <input type="number" id="frame_count" min="1" max="9" value="${escapeHtml(cfg.frame_count || 9)}">
+              <label for="chrome_opacity">Controls opacity (%)</label>
+              <input type="number" id="chrome_opacity" min="20" max="100" step="5" aria-describedby="controls-opacity-help" value="${escapeHtml(Number(((cfg.chrome_opacity ?? 1) * 100).toFixed(6)))}">
             </div>
           </div>
-          ${this._toggle('use_custom_accent_color', 'Custom accent color', Boolean(cfg.accent_color))}
-          ${cfg.accent_color ? `
-            <div class="row">
-              <label>UI Accent Color</label>
-              <input type="color" id="accent_color" value="${escapeHtml(cfg.accent_color || DEFAULT_UI_ACCENT_COLOR)}">
-              <div class="help-text">Optional. Leave this off to use the card&apos;s neutral default UI accent.</div>
-            </div>
-          ` : ''}
-          ${this._toggle('use_custom_location_color', 'Custom GPS marker color', Boolean(cfg.location_color))}
-          ${cfg.location_color ? `
-            <div class="row">
-              <label>GPS Location Color</label>
-              <input type="color" id="location_color" value="${escapeHtml(cfg.location_color || DEFAULT_ACCENT_COLOR)}">
-              <div class="help-text">Optional. Leave this off to keep the marker tied to your Home Assistant accent color.</div>
-            </div>
-          ` : ''}
+          <div class="help-text" id="controls-opacity-help">Open panels stay solid for readability.</div>
         </div>
-
-        <div class="section">
-          <div class="section-title">Visible Layers</div>
-          <div class="layer-list">
-            ${BOM_LAYER_GROUPS.map((groupName) => {
-              const entries = Object.entries(BOM_LAYERS).filter(([, layer]) => layer.category === groupName);
-              if (!entries.length) return '';
-              return `
-                <div class="layer-group-title">${groupName}</div>
-                ${entries.map(([key, layer]) =>
-                  this._toggle(`enabled_layer__${key}`, `${layer.name} (${layer.unit})`, enabledLayerKeys.includes(key))
-                ).join('')}
-              `;
-            }).join('')}
-          </div>
-        </div>
-
-      <div class="section">
-        <div class="section-title">Map</div>
+        <details class="section" data-section="map" ${this._openSections.has('map') ? 'open' : ''}>
+          <summary><span><span class="section-title">Map</span><span class="section-description">Background, size and starting view</span></span></summary>
+          <div class="section-content">
           <div class="row-inline">
             <div class="row">
-              <label>Basemap Provider</label>
+              <label for="basemap_provider">Map provider</label>
               <select id="basemap_provider">
                 ${Object.entries(BASEMAP_PROVIDER_NAMES).map(([key, label]) =>
                   `<option value="${key}" ${basemapProvider === key ? 'selected' : ''}>${label}</option>`
@@ -2108,7 +2580,7 @@ class BomRadarCardEditor extends HTMLElement {
               </select>
             </div>
             <div class="row">
-              <label>Basemap Style</label>
+              <label for="basemap_style">Map style</label>
               <select id="basemap_style">
                 ${getBasemapStyleOptions(basemapProvider).map((style) =>
                   `<option value="${style.value}" ${basemapStyle === style.value ? 'selected' : ''}>${style.label}</option>`
@@ -2116,105 +2588,168 @@ class BomRadarCardEditor extends HTMLElement {
               </select>
             </div>
           </div>
-          <div class="row">
-            <label>Basemap API Key</label>
-            <input type="password" id="basemap_api_key" value="${escapeHtml(basemapApiKey || '')}" autocomplete="off" ${basemapProvider === 'bom' ? 'disabled' : ''}>
-            <div class="help-text">Not used by BOM. CARTO uses its dedicated <code>carto_api_key</code>; Stadia Maps and Esri use <code>basemap_api_key</code>. Keys are provider-specific and are cleared when the provider changes. See the <a href="https://github.com/AshtonAU/bom-radar-card#getting-basemap-provider-keys" target="_blank" rel="noreferrer">README provider-key guide</a>.</div>
+          <div class="row" ${basemapProvider === 'bom' ? 'hidden' : ''}>
+            <label for="basemap_api_key">${BASEMAP_PROVIDER_NAMES[basemapProvider]} API key</label>
+            <input type="password" id="basemap_api_key" value="${escapeHtml(basemapApiKey || '')}" autocomplete="off" aria-describedby="provider-key-help" ${basemapProvider === 'bom' ? 'disabled' : ''}>
+            <div class="help-text" id="provider-key-help">Use a key from your selected provider. Changing providers clears the saved key. <a href="https://github.com/AshtonAU/bom-radar-card#getting-basemap-provider-keys" target="_blank" rel="noreferrer">How to get a key</a>.</div>
           </div>
-          ${this._toggle('show_bom_boundaries', 'BOM state borders overlay', bomReferenceLayerKeys.includes('state_borders'))}
-          <div class="row">
-            <label>BOM reference overlays</label>
-            <div class="layer-list">
+          <details class="map-details" data-section="references" ${this._openSections.has('references') ? 'open' : ''}>
+            <summary id="reference-overlays-title">Boundaries and landmarks</summary>
+            <div role="group" aria-labelledby="reference-overlays-title">
+              ${this._toggle('show_bom_boundaries', 'State borders', bomReferenceLayerKeys.includes('state_borders'))}
               ${additionalBomReferenceLayers.map(([key, layer]) =>
                 this._toggle(`bom_reference_layer__${key}`, layer.name, bomReferenceLayerKeys.includes(key))
               ).join('')}
             </div>
-            <div class="help-text">Optional BOM map reference tiles shown above the weather overlay.</div>
-          </div>
+            <div class="help-text">Add boundaries and landmarks above the weather layer.</div>
+          </details>
           <div class="row-inline">
             <div class="row">
-              <label>Zoom (3-${cfg.allow_overzoom === true ? MAX_OVERZOOM_DISPLAY_ZOOM : MAX_DISPLAY_ZOOM})</label>
+              <label for="zoom_level">Starting zoom (3–${cfg.allow_overzoom === true ? MAX_OVERZOOM_DISPLAY_ZOOM : MAX_DISPLAY_ZOOM})</label>
               <input type="number" id="zoom_level" min="3" max="${cfg.allow_overzoom === true ? MAX_OVERZOOM_DISPLAY_ZOOM : MAX_DISPLAY_ZOOM}" value="${escapeHtml(cfg.zoom_level || 7)}">
             </div>
             <div class="row">
-              <label>Height (px)</label>
+              <label for="map_height">Card height (px)</label>
               <input type="number" id="map_height" min="150" max="800" value="${escapeHtml(cfg.map_height || 300)}">
             </div>
           </div>
-          ${this._toggle('allow_overzoom', 'Allow overzoom (Experimental)', cfg.allow_overzoom === true)}
-          <div class="help-text">Off by default. When enabled, the card can zoom to 10 by scaling BOM&apos;s native z8 radar tiles for a closer local view. This does not add extra native radar detail.</div>
+          ${this._toggle('allow_overzoom', 'Closer zoom · experimental', cfg.allow_overzoom === true, 'overzoom-help')}
+          <div class="help-text" id="overzoom-help">Allow zoom levels up to 10. This enlarges the map without adding weather detail.</div>
           <div class="row-inline">
             <div class="row">
-              <label>Center Lat</label>
-              <input type="number" id="center_latitude" step="0.01" value="${escapeHtml(cfg.center_latitude ?? '')}">
+              <label for="center_latitude">Centre latitude</label>
+              <input type="number" id="center_latitude" step="0.01" min="-90" max="90" placeholder="Home location" aria-describedby="map-centre-help" value="${escapeHtml(cfg.center_latitude ?? '')}">
             </div>
             <div class="row">
-              <label>Center Lon</label>
-              <input type="number" id="center_longitude" step="0.01" value="${escapeHtml(cfg.center_longitude ?? '')}">
+              <label for="center_longitude">Centre longitude</label>
+              <input type="number" id="center_longitude" step="0.01" min="-180" max="180" placeholder="Home location" aria-describedby="map-centre-help" value="${escapeHtml(cfg.center_longitude ?? '')}">
             </div>
           </div>
-        </div>
+          <div class="help-text" id="map-centre-help">Leave blank to centre the map on your Home Assistant home location.</div>
+          </div>
+        </details>
 
-        <div class="section">
-          <div class="section-title">Animation</div>
+        <details class="section" data-section="playback" ${this._openSections.has('playback') ? 'open' : ''}>
+          <summary><span><span class="section-title">Playback</span><span class="section-description">Animation speed and frame count</span></span></summary>
+          <div class="section-content">
+          <div class="row">
+            <label for="frame_count">Frames per loop</label>
+            <input type="number" id="frame_count" min="1" max="9" value="${escapeHtml(cfg.frame_count || 9)}">
+          </div>
           <div class="row-inline">
             <div class="row">
-              <label>Frame Delay (ms)</label>
+              <label for="frame_delay">Time per frame (ms)</label>
               <input type="number" id="frame_delay" min="100" max="2000" step="50" value="${escapeHtml(cfg.frame_delay || 500)}">
             </div>
             <div class="row">
-              <label>Loop Pause (ms)</label>
+              <label for="restart_delay">Pause between loops (ms)</label>
               <input type="number" id="restart_delay" min="500" max="5000" step="100" value="${escapeHtml(cfg.restart_delay || 1500)}">
             </div>
           </div>
-        </div>
+          </div>
+        </details>
 
-        <div class="section">
-          <div class="section-title">Display</div>
+        <details class="section" data-section="display" ${this._openSections.has('display') ? 'open' : ''}>
+          <summary><span><span class="section-title">Controls and appearance</span><span class="section-description">Buttons, colour strips and card styling</span></span></summary>
+          <div class="section-content">
           ${this._toggle('show_marker', 'Home marker', cfg.show_marker !== false)}
           ${this._toggle('show_zoom', 'Zoom controls', cfg.show_zoom !== false)}
-          ${this._toggle('show_recenter', 'Recenter button', cfg.show_recenter !== false)}
-          ${this._toggle('show_layer_switcher', 'Layer switcher', cfg.show_layer_switcher !== false)}
+          ${this._toggle('show_recenter', 'Re-centre button', cfg.show_recenter !== false)}
+          ${this._toggle('show_layer_switcher', 'Layer picker', cfg.show_layer_switcher !== false)}
+          ${this._toggle('auto_hide_controls', 'Auto-hide controls', cfg.auto_hide_controls === true, 'auto-hide-controls-help')}
+          <div class="help-text" id="auto-hide-controls-help">After 10 seconds of inactivity, show only the map and top colour strip. The toolbar, playback, timestamps, layer title and map credits fade out. Move the pointer or tap once to bring them back.</div>
           ${this._toggle('show_playback', 'Playback controls', cfg.show_playback !== false)}
-          ${this._toggle('show_legend', 'Radar legend', cfg.show_legend !== false)}
+          ${this._toggle('show_legend', 'Radar colour strip', cfg.show_legend !== false)}
+          ${this._toggle('show_weather_legend', 'Other weather colour strips', cfg.show_weather_legend === true, 'weather-strips-help')}
+          ${this._toggle('show_legend_button', 'Colour key button', cfg.show_legend_button !== false)}
+          <div class="help-text" id="weather-strips-help">The thin strip shows the active layer&apos;s colours. Tap it or the colour key button for values and units. Direction-only layers have no strip.</div>
           ${radarCoverageAvailable
             ? this._toggle('show_radar_coverage', 'Shade areas outside radar coverage', cfg.show_radar_coverage === true)
             : ''}
-          ${this._toggle('square_style', 'Square style', cfg.square_style === true)}
-          ${this._toggle('show_layer_label', 'Layer label', cfg.show_layer_label === true)}
-          ${this._toggle('show_attribution', 'Attribution', cfg.show_attribution !== false)}
-          <div class="help-text">Optional card setting. CARTO requires visible OpenStreetMap and CARTO attribution, so disabling this while using CARTO violates its provider terms.</div>
-        </div>
+          ${this._toggle('square_style', 'Square corners', cfg.square_style === true)}
+          ${this._toggle('show_layer_label', 'Weather layer title', cfg.show_layer_label === true)}
+          ${this._toggle('show_attribution', 'Map credits', cfg.show_attribution !== false, 'attribution-help')}
+          <div class="help-text" id="attribution-help">Keep credits visible to acknowledge the map and weather providers. CARTO requires them.</div>
+          ${this._toggle('use_custom_accent_color', 'Custom accent colour', Boolean(cfg.accent_color))}
+          ${cfg.accent_color ? `
+            <div class="row">
+              <label for="accent_color">Controls accent</label>
+              <input type="color" id="accent_color" aria-describedby="accent-help" value="${escapeHtml(cfg.accent_color || DEFAULT_UI_ACCENT_COLOR)}">
+              <div class="help-text" id="accent-help">Leave custom colour off to follow your Home Assistant theme.</div>
+            </div>
+          ` : ''}
+          </div>
+        </details>
 
-        <div class="section">
-          <div class="section-title">Lightning</div>
-          ${this._toggle('show_lightning', 'Lightning strikes (Blitzortung)', cfg.show_lightning !== false)}
+        <details class="section" data-section="layers" ${this._openSections.has('layers') ? 'open' : ''}>
+          <summary><span><span class="section-title">Available layers</span><span class="section-description">${enabledLayerKeys.length} of ${DEFAULT_ENABLED_LAYERS.length} layers in the picker</span></span></summary>
+          <div class="section-content">
+          <p class="help-text" id="enabled-layers-help">Choose which weather layers people can switch between. Keep at least one enabled.</p>
+          <div class="layer-list" role="group" aria-label="Available weather layers" aria-describedby="enabled-layers-help">
+            ${BOM_LAYER_GROUPS.map((groupName) => {
+              const entries = Object.entries(BOM_LAYERS).filter(([, layer]) => layer.category === groupName);
+              if (!entries.length) return '';
+              return `
+                <h3 class="layer-group-title">${groupName}</h3>
+                ${entries.map(([key, layer]) =>
+                  this._toggle(`enabled_layer__${key}`, layerOptionLabel(layer), enabledLayerKeys.includes(key))
+                ).join('')}
+              `;
+            }).join('')}
+          </div>
+          </div>
+        </details>
+
+        <details class="section" data-section="lightning" ${this._openSections.has('lightning') ? 'open' : ''}>
+          <summary><span><span class="section-title">Lightning</span><span class="section-description">${blitzLoaded ? 'Strike visibility and fading' : 'Requires the Blitzortung integration'}</span></span></summary>
+          <div class="section-content">
+          ${this._toggle('show_lightning', 'Lightning strikes', cfg.show_lightning !== false)}
           ${blitzLoaded ? (cfg.show_lightning !== false ? `
             <div class="row">
-              <label>Fade window (minutes)</label>
+              <label for="lightning_fade_minutes">Show strikes from the last (minutes)</label>
               <input type="number" id="lightning_fade_minutes" min="1" max="120" value="${escapeHtml(cfg.lightning_fade_minutes ?? 30)}">
             </div>
             ${this._toggle('lightning_pulse', 'Pulse on new strike', cfg.lightning_pulse !== false)}
           ` : '') : `
-            <div class="help-text">Requires the <a href="https://github.com/mrk-its/homeassistant-blitzortung" target="_blank" rel="noreferrer">Blitzortung integration</a>. Not detected on this Home Assistant instance.</div>
+            <div class="help-text">The <a href="https://github.com/mrk-its/homeassistant-blitzortung" target="_blank" rel="noreferrer">Blitzortung integration</a> is not detected. Add it to Home Assistant to show nearby lightning strikes.</div>
           `}
-        </div>
+          </div>
+        </details>
 
-        <div class="section">
-          <div class="section-title">Marker Position</div>
+        <details class="section" data-section="location" ${this._openSections.has('location') ? 'open' : ''}>
+          <summary><span><span class="section-title">Home marker</span><span class="section-description">Location and marker colour</span></span></summary>
+          <div class="section-content">
           <div class="row-inline">
             <div class="row">
-              <label>Marker Lat</label>
-              <input type="number" id="marker_latitude" step="0.01" value="${escapeHtml(cfg.marker_latitude ?? '')}">
+              <label for="marker_latitude">Marker latitude</label>
+              <input type="number" id="marker_latitude" step="0.01" min="-90" max="90" placeholder="Home location" aria-describedby="marker-location-help" value="${escapeHtml(cfg.marker_latitude ?? '')}">
             </div>
             <div class="row">
-              <label>Marker Lon</label>
-              <input type="number" id="marker_longitude" step="0.01" value="${escapeHtml(cfg.marker_longitude ?? '')}">
+              <label for="marker_longitude">Marker longitude</label>
+              <input type="number" id="marker_longitude" step="0.01" min="-180" max="180" placeholder="Home location" aria-describedby="marker-location-help" value="${escapeHtml(cfg.marker_longitude ?? '')}">
             </div>
           </div>
-        </div>
+          <div class="help-text" id="marker-location-help">Leave blank to use your Home Assistant home location.</div>
+          ${this._toggle('use_custom_location_color', 'Custom marker colour', Boolean(cfg.location_color))}
+          ${cfg.location_color ? `
+            <div class="row">
+              <label for="location_color">Marker colour</label>
+              <input type="color" id="location_color" aria-describedby="marker-colour-help" value="${escapeHtml(cfg.location_color || DEFAULT_ACCENT_COLOR)}">
+              <div class="help-text" id="marker-colour-help">Leave custom colour off to use your Home Assistant accent.</div>
+            </div>
+          ` : ''}
+          </div>
+        </details>
       </div>
     `;
+
+    this.shadowRoot.querySelectorAll('details[data-section]').forEach(section => {
+      section.addEventListener('toggle', () => {
+        const name = section.getAttribute('data-section');
+        if (section.open) this._openSections.add(name);
+        else this._openSections.delete(name);
+      });
+    });
 
     // Bind events
     const fields = [
@@ -2230,8 +2765,9 @@ class BomRadarCardEditor extends HTMLElement {
     });
 
     const toggles = [
+      'auto_hide_controls',
       'show_marker', 'show_zoom', 'show_recenter', 'show_layer_switcher', 'show_playback',
-      'show_legend', 'show_bom_boundaries', 'square_style', 'show_layer_label', 'show_attribution', 'allow_overzoom', 'use_custom_accent_color', 'use_custom_location_color',
+      'show_legend', 'show_weather_legend', 'show_legend_button', 'show_bom_boundaries', 'square_style', 'show_layer_label', 'show_attribution', 'allow_overzoom', 'use_custom_accent_color', 'use_custom_location_color',
       'show_lightning', 'lightning_pulse', 'show_radar_coverage',
     ];
     toggles.forEach(id => {
@@ -2248,17 +2784,20 @@ class BomRadarCardEditor extends HTMLElement {
       const el = this.shadowRoot.getElementById(`bom_reference_layer__${key}`);
       if (el) el.addEventListener('change', () => this._valueChanged());
     });
+    const layerList = this.shadowRoot.querySelector('.layer-list');
+    if (layerList) layerList.scrollTop = layersScrollTop;
+    if (focusedId) this.shadowRoot.getElementById(focusedId)?.focus({ preventScroll: true });
   }
 
-  _toggle(id, label, checked) {
+  _toggle(id, label, checked, describedBy = '') {
     return `
-      <div class="toggle-row">
+      <label class="toggle-row" for="${id}">
         <span class="toggle-label">${label}</span>
-        <label class="toggle">
-          <input type="checkbox" id="${id}" ${checked ? 'checked' : ''}>
-          <span class="toggle-slider"></span>
-        </label>
-      </div>
+        <span class="toggle">
+          <input type="checkbox" role="switch" id="${id}" ${checked ? 'checked' : ''} ${describedBy ? `aria-describedby="${describedBy}"` : ''}>
+          <span class="toggle-slider" aria-hidden="true"></span>
+        </span>
+      </label>
     `;
   }
 
@@ -2348,7 +2887,7 @@ class BomRadarCardEditor extends HTMLElement {
     const useCustomAccent = get('use_custom_accent_color');
     if (useCustomAccent?.checked) {
       const accentColor = sanitizeAccentColor(get('accent_color')?.value);
-      config.accent_color = accentColor || DEFAULT_UI_ACCENT_COLOR;
+      config.accent_color = accentColor || (this.getAttribute('data-theme') === 'dark' ? '#edf1f5' : '#26384b');
     } else {
       delete config.accent_color;
     }
@@ -2367,7 +2906,7 @@ class BomRadarCardEditor extends HTMLElement {
       restart_delay: 'int', frame_count: 'int',
       center_latitude: 'float', center_longitude: 'float',
       marker_latitude: 'float', marker_longitude: 'float',
-      radar_opacity: 'float', chrome_opacity: 'float',
+      radar_opacity: 'percent', chrome_opacity: 'percent',
       lightning_fade_minutes: 'int',
     };
 
@@ -2377,13 +2916,14 @@ class BomRadarCardEditor extends HTMLElement {
       if (el.value === '') {
         delete config[id];
       } else {
-        config[id] = type === 'int' ? parseInt(el.value) : parseFloat(el.value);
+        config[id] = type === 'int' ? parseInt(el.value) : parseFloat(el.value) / (type === 'percent' ? 100 : 1);
       }
     });
 
     const toggleFields = [
+      'auto_hide_controls',
       'show_marker', 'show_zoom', 'show_recenter', 'show_layer_switcher', 'show_playback',
-      'show_legend', 'show_bom_boundaries', 'square_style', 'show_layer_label', 'show_attribution', 'allow_overzoom',
+      'show_legend', 'show_weather_legend', 'show_legend_button', 'show_bom_boundaries', 'square_style', 'show_layer_label', 'show_attribution', 'allow_overzoom',
       'show_lightning', 'lightning_pulse', 'show_radar_coverage',
     ];
     toggleFields.forEach(id => {

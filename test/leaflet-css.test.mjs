@@ -7,10 +7,9 @@ const leafletCss = cardSource.match(/const LEAFLET_CSS = `([\s\S]*?)`;/)?.[1] ??
 const cardCss = cardSource.match(/const CARD_CSS = `([\s\S]*?)`;/)?.[1] ?? '';
 
 function getCssProperty(css, selector, property) {
-  const escapedSelector = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const rules = css.matchAll(new RegExp(`${escapedSelector}\\s*\\{([^}]*)\\}`, 'g'));
-
-  for (const [, declarations] of rules) {
+  const rules = css.replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/([^{}]+)\{([^{}]*)\}/g);
+  for (const [, selectors, declarations] of rules) {
+    if (selectors.trim() !== selector && !selectors.split(',').some(item => item.trim() === selector)) continue;
     const value = declarations.match(new RegExp(`(?:^|;)\\s*${property}\\s*:\\s*([^;]+)`))?.[1];
     if (value !== undefined) return value.trim();
   }
@@ -46,6 +45,50 @@ test('keeps loaded Leaflet tiles and overlays behind the home marker pane', () =
 
 test('preserves Leaflet absolute positioning for the home marker icon', () => {
   assert.equal(getCssProperty(cardCss, '.marker-dot', 'position'), 'absolute');
+});
+
+test('uses shared theme typography and keeps playback hover unfilled with visible keyboard focus', () => {
+  assert.equal(getCssProperty(cardCss, ':host', 'font-family'), 'var(--bom-font-family)');
+  assert.equal(getCssProperty(cardCss, '.play-btn', 'background'), 'none');
+  assert.equal(getCssProperty(cardCss, '.play-btn:hover', 'color'), 'var(--bom-text)');
+  assert.doesNotMatch(cardCss.match(/\.play-btn:hover\s*\{([^}]*)\}/)[1], /background/);
+  assert.match(cardCss, /\.play-btn:focus-visible[^}]*outline: 2px solid/);
+});
+
+test('map actions share one toolbar with consistent sizes and no repeated control margins', () => {
+  assert.equal(getCssProperty(leafletCss, '.leaflet-top.leaflet-right', 'display'), 'flex');
+  assert.equal(getCssProperty(leafletCss, '.leaflet-top.leaflet-right > .leaflet-control', 'margin'), '0');
+  assert.equal(getCssProperty(leafletCss, '.leaflet-top.leaflet-right[hidden]', 'display'), 'none');
+  assert.equal(getCssProperty(cardCss, '.card-content.has-top-legend .leaflet-top.leaflet-right', 'top'), '14px');
+  assert.equal(getCssProperty(cardCss, '.bom-key-cluster', 'flex-direction'), 'column');
+  for (const selector of ['.leaflet-control-zoom a', '.bom-recenter-button', '.bom-layer-button']) {
+    assert.equal(getCssProperty(leafletCss, selector, 'width'), 'var(--bom-control-size)');
+    assert.equal(getCssProperty(leafletCss, selector, 'height'), 'var(--bom-control-size)');
+    assert.equal(getCssProperty(leafletCss, selector, 'background'), 'transparent');
+  }
+  assert.equal(getCssProperty(cardCss, '.card-content', '--bom-control-size'), '36px');
+  assert.match(cardCss, /@media \(pointer: coarse\)\s*\{\s*\.card-content\s*\{\s*--bom-control-size: 44px;/);
+  assert.doesNotMatch(cardCss, /margin-top:\s*(18|20)px/);
+});
+
+test('loading uses theme text colour while interactive highlights retain their accent', () => {
+  assert.equal(getCssProperty(cardCss, '.spinner', 'border-top-color'), 'var(--bom-text)');
+  assert.equal(getCssProperty(cardCss, '.spinner', 'border'), '2px solid color-mix(in srgb, var(--bom-text) 15%, transparent)');
+  assert.equal(getCssProperty(cardCss, '.frame-dot.active::after', 'background'), 'var(--bom-ui-accent-color, #F8FAFC)');
+});
+
+test('layer grid has a fixed header and an internally scrolling body', () => {
+  assert.equal(getCssProperty(cardCss, '.bom-layer-panel, .bom-key-panel', 'overflow'), 'hidden');
+  assert.equal(getCssProperty(cardCss, '.bom-layer-header, .bom-key-header', 'flex-shrink'), '0');
+  assert.equal(getCssProperty(cardCss, '.bom-layer-body, .bom-key-body', 'overflow'), 'auto');
+  assert.equal(getCssProperty(leafletCss, '.bom-layer-grid', 'grid-template-columns'), 'repeat(var(--bom-layer-columns,2),minmax(0,1fr))');
+});
+
+test('panels share theme-aware foreground and solid surface tokens', () => {
+  assert.equal(getCssProperty(cardCss, '.bom-key-panel', 'position'), 'absolute');
+  assert.equal(getCssProperty(cardCss, '.bom-key-panel', 'overflow'), 'hidden');
+  assert.equal(getCssProperty(cardCss, '.bom-layer-panel, .bom-key-panel', 'color'), 'var(--bom-text)');
+  assert.equal(getCssProperty(cardCss, '.bom-layer-panel, .bom-key-panel', 'background'), 'var(--bom-panel-background)');
 });
 
 test('isolates Leaflet below card-owned controls and overlays', () => {

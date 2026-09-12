@@ -6,13 +6,14 @@ import { fileURLToPath } from 'node:url';
 import { rollup } from 'rollup';
 
 import { BOM_LAYERS } from '../src/bom-layers.js';
+import { bundleUiFont } from '../scripts/bundle-ui-font.mjs';
 
 const LEAFLET_TEST_MODULE_ID = '\0bom-radar-card-leaflet-test-double';
 
 async function buildLifecycleBundle() {
   const bundle = await rollup({
     input: fileURLToPath(new URL('../src/bom-radar-card.js', import.meta.url)),
-    plugins: [{
+    plugins: [bundleUiFont(), {
       name: 'leaflet-lifecycle-test-boundary',
       resolveId(source) {
         return source === 'leaflet/dist/leaflet-src.esm.js' ? LEAFLET_TEST_MODULE_ID : null;
@@ -95,7 +96,7 @@ class FakeClassList {
 
 function matchesSelector(element, selector) {
   if (selector.startsWith('#')) return element.id === selector.slice(1);
-  if (selector.startsWith('.')) return element.classList.contains(selector.slice(1));
+  if (selector.startsWith('.')) return selector.slice(1).split('.').every(name => element.classList.contains(name));
   return element.localName === selector.toLowerCase();
 }
 
@@ -148,6 +149,9 @@ class FakeElement {
     this.children = [];
     this.parentNode = null;
     this.style = {
+      setProperty(name, value) {
+        this[name] = value;
+      },
       removeProperty(name) {
         delete this[name];
       },
@@ -177,6 +181,25 @@ class FakeElement {
 
   get firstChild() {
     return this.children[0] ?? null;
+  }
+
+  contains(element) {
+    if (!element) return false;
+    return this === element || this.children.some(child => child.contains(element));
+  }
+
+  focus(options) {
+    this.focusOptions = options;
+    this.ownerDocument.activeElement = this;
+    let root = this;
+    while (root.parentNode) root = root.parentNode;
+    root.activeElement = this;
+    this.focused = true;
+  }
+
+  matches(selector) {
+    if (selector === ':focus-visible') return this.focusVisible === true;
+    return matchesSelector(this, selector);
   }
 
   set innerHTML(value) {
@@ -237,6 +260,10 @@ class FakeElement {
     this.eventListeners[type].push(listener);
   }
 
+  removeEventListener(type, listener) {
+    this.eventListeners[type] = (this.eventListeners[type] || []).filter(value => value !== listener);
+  }
+
   dispatchEvent(event) {
     const resolvedEvent = typeof event === 'string' ? { type: event } : event;
     for (const listener of this.eventListeners[resolvedEvent.type] || []) {
@@ -261,10 +288,12 @@ class FakeElement {
   }
 
   insertAdjacentHTML(position, html) {
-    const element = this.ownerDocument.createElement('div');
+    const element = this.ownerDocument.createElement(String(html).match(/<([a-z]+)/)?.[1] || 'div');
     const classMatch = String(html).match(/class="([^"]+)"/);
     if (classMatch) element.className = classMatch[1];
     element.innerHTML = html;
+    const layerMatch = String(html).match(/data-layer="([^"]+)"/);
+    if (layerMatch) element.dataset.layer = layerMatch[1];
 
     if (position === 'beforebegin' && this.parentNode) {
       this.parentNode.insertBefore(element, this);
@@ -467,7 +496,7 @@ function createScheduler() {
   };
 }
 
-function createLeafletDouble(document) {
+function createLeafletDouble(document, renderControlContainers = false) {
   const state = {
     maps: [],
     tileLayerCalls: [],
@@ -484,6 +513,18 @@ function createLeafletDouble(document) {
       this.panes = {};
       this.invalidateSizeCalls = 0;
       this.removed = false;
+      if (renderControlContainers) {
+        this.toolbar = document.createElement('div');
+        this.toolbar.className = 'leaflet-top leaflet-right';
+        container.appendChild(this.toolbar);
+        if (options.attributionControl) {
+          const credits = document.createElement('div');
+          credits.className = 'leaflet-control-attribution';
+          credits.clientWidth = 140;
+          credits.clientHeight = 18;
+          container.appendChild(credits);
+        }
+      }
       this.attributionControl = {
         attributions: [],
         setPrefix: () => {},
@@ -564,6 +605,7 @@ function createLeafletDouble(document) {
     return {
       addTo(map) {
         this._container = this.onAdd?.(map) ?? null;
+        if (this._container && map.toolbar) map.toolbar.appendChild(this._container);
         map.controls.push(this);
         return this;
       },
@@ -659,6 +701,8 @@ function createWindow() {
   const listeners = {};
   return {
     customCards: [],
+    innerWidth: 1024,
+    innerHeight: 768,
     addEventListener(type, listener) {
       listeners[type] ||= new Set();
       listeners[type].add(listener);
@@ -668,6 +712,9 @@ function createWindow() {
     },
     listenerCount(type) {
       return listeners[type]?.size ?? 0;
+    },
+    dispatchEvent(event) {
+      for (const listener of listeners[event.type] || []) listener(event);
     },
     matchMedia() {
       return { matches: false };
@@ -679,13 +726,13 @@ function evaluateLifecycleBundle(sandbox) {
   new vm.Script(lifecycleBundle, { filename: 'bom-radar-card.lifecycle-bundle.js' }).runInContext(sandbox);
 }
 
-function createHarness({ tileLayerThrows = false, imageResponder = () => true } = {}) {
+function createHarness({ tileLayerThrows = false, imageResponder = () => true, renderControlContainers = false } = {}) {
   const document = new FakeDocument();
   currentDocument = document;
   const customElements = createCustomElementsRegistry();
   const scheduler = createScheduler();
   const window = createWindow();
-  const { leaflet, state: leafletState } = createLeafletDouble(document);
+  const { leaflet, state: leafletState } = createLeafletDouble(document, renderControlContainers);
   leafletState.tileLayerThrows = tileLayerThrows;
   const consoleMessages = { info: [], warn: [], error: [] };
   const observerState = { resize: [], intersection: [] };
@@ -1081,8 +1128,8 @@ test('keeps old layers visible and commits only the newest overlapping same-laye
   assert.equal(card._radarLayers.length, 7);
   assert.ok(originalLayers.every((layer) => !card._map.layers.includes(layer)));
   assert.equal(card._map.layers.length, 8, 'one basemap plus seven current forecast frames');
-  assert.equal(card._layerSwitcher.button.title, 'Weather layer: Chance of Rain Daily');
-  assert.match(card.shadowRoot.querySelector('.layer-badge').innerHTML, /Chance of Rain Daily/);
+  assert.equal(card._layerSwitcher.button.title, 'Weather layer: Chance of rain · daily');
+  assert.match(card.shadowRoot.querySelector('.layer-badge').innerHTML, /Chance of rain · daily/);
   assert.ok(timeline(card).children.every((dot) => /(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)/
     .test(dot.getAttribute('aria-label'))), 'the committed daily product owns timeline formatting');
   assert.equal(harness.scheduler.activeTimeoutDelays().filter((delay) => delay === 500).length, 1);
@@ -1287,10 +1334,10 @@ test('rolls a failed product switch back without mislabelling the previous radar
     label: dot.getAttribute('aria-label'),
   })), originalTimeline);
   assert.equal(card.shadowRoot.getElementById('time-label').textContent, originalTimeLabel);
-  assert.equal(card._layerSwitcher.button.title, 'Weather layer: Rain Reflectivity');
+  assert.equal(card._layerSwitcher.button.title, 'Weather layer: Rain reflectivity');
   assert.equal(reflectivityOption.getAttribute('aria-pressed'), 'true');
   assert.equal(forecastOption.getAttribute('aria-pressed'), 'false');
-  assert.match(card.shadowRoot.querySelector('.layer-badge').innerHTML, /Rain Reflectivity/);
+  assert.match(card.shadowRoot.querySelector('.layer-badge').innerHTML, /Rain reflectivity/);
   assert.equal(harness.consoleMessages.warn.length, 1);
   assert.match(String(harness.consoleMessages.warn[0][0]), /Failed to switch to layer/);
 
@@ -1352,8 +1399,8 @@ test('rolls A-to-B-pending then C-failed back to the committed A product', async
   assert.equal(JSON.stringify(card._timestamps), JSON.stringify(committedTimestamps));
   assert.equal(card._radarCoverageLayer, committedCoverageLayer);
   assert.equal(card._map.hasLayer(partiallyAddedCLayer), false);
-  assert.equal(card._layerSwitcher.button.title, 'Weather layer: Rain Reflectivity');
-  assert.match(card.shadowRoot.querySelector('.layer-badge').innerHTML, /Rain Reflectivity/);
+  assert.equal(card._layerSwitcher.button.title, 'Weather layer: Rain reflectivity');
+  assert.match(card.shadowRoot.querySelector('.layer-badge').innerHTML, /Rain reflectivity/);
   assert.deepEqual(
     timeline(card).children.map((dot) => dot.getAttribute('aria-label')),
     committedTimelineLabels,
@@ -1368,7 +1415,7 @@ test('rolls A-to-B-pending then C-failed back to the committed A product', async
   assert.ok(card._radarLayers.every((layer, index) => layer === rebuiltCommittedLayers[index]),
     'the stale B completion cannot replace committed A');
   assert.equal(card._radarCoverageLayer, committedCoverageLayer);
-  assert.equal(card._layerSwitcher.button.title, 'Weather layer: Rain Reflectivity');
+  assert.equal(card._layerSwitcher.button.title, 'Weather layer: Rain reflectivity');
 
   setConnected(card, false);
   assert.equal(card._committedRadarLayerKey, null);
@@ -1711,6 +1758,970 @@ test('keeps attribution user-toggleable for every basemap provider', async () =>
 
       setConnected(card, false);
     }
+  }
+});
+
+test('uniform colour strip is opt-in, follows the committed product, and retains its node on refresh', async () => {
+  const harness = createHarness();
+  const card = await initializeCard(harness, { ...issueConfig(), layer: 'air_temperature' });
+  assert.equal(card._config.show_weather_legend, false);
+  assert.equal(card.shadowRoot.querySelector('.legend-card'), null);
+  card.setConfig({ ...issueConfig(), layer: 'air_temperature', show_weather_legend: true });
+  await flushUntil(() => card._committedRadarLayerKey === 'air_temperature');
+  const legend = card.shadowRoot.querySelector('.legend-card');
+  assert.ok(legend);
+  assert.equal(legend.dataset.layer, 'air_temperature');
+  card._renderTopOverlays();
+  assert.equal(card.shadowRoot.querySelector('.legend-card'), legend);
+  card._config.layer = 'wind_speed_kmh';
+  card._renderTopOverlays();
+  assert.equal(card.shadowRoot.querySelector('.legend-card'), legend, 'pending switch still labels committed temperature');
+  card._committedRadarLayerKey = 'wind_speed_kmh';
+  card._renderTopOverlays();
+  assert.equal(card.shadowRoot.querySelector('.legend-card').dataset.layer, 'wind_speed_kmh');
+  card._committedRadarLayerKey = 'wind_direction';
+  card._renderTopOverlays();
+  assert.equal(card.shadowRoot.querySelector('.legend-card'), null);
+  card._committedRadarLayerKey = 'reflectivity';
+  card._config.show_legend = true;
+  card._renderTopOverlays();
+  assert.ok(card.shadowRoot.querySelector('.legend-card'), 'existing radar legend remains');
+  setConnected(card, false);
+});
+
+test('every layer shares one top-strip layout without losing the configured layer badge', async () => {
+  const harness = createHarness();
+  const card = await initializeCard(harness, { ...issueConfig(), show_legend: true, show_weather_legend: true, show_layer_label: true });
+  for (const key of Object.keys(BOM_LAYERS)) {
+    card._committedRadarLayerKey = key;
+    card._renderTopOverlays();
+    const legends = card.shadowRoot.querySelectorAll('.legend-card');
+    const direction = ['wind_direction', 'swell_1_direction', 'swell_2_direction'].includes(key);
+    assert.equal(legends.length, direction ? 0 : 1, key);
+    assert.equal(card.shadowRoot.querySelector('.card-content').classList.contains('has-top-legend'), !direction, key);
+    assert.ok(card.shadowRoot.querySelector('.layer-badge'), key);
+    if (!direction) assert.equal(legends[0].dataset.layer, key);
+  }
+  card._committedRadarLayerKey = 'air_temperature';
+  card._config.show_weather_legend = false;
+  card._renderTopOverlays();
+  assert.equal(card.shadowRoot.querySelector('.legend-card'), null);
+  setConnected(card, false);
+});
+
+test('editor round-trips the optional weather key separately from the radar legend', () => {
+  const harness = createHarness();
+  const editor = new harness.Editor();
+  let changedConfig;
+  editor.addEventListener('config-changed', event => { changedConfig = event.detail.config; });
+  editor.setConfig({ ...issueConfig(), show_legend: false });
+  const toggle = editor.shadowRoot.getElementById('show_weather_legend');
+  assert.equal(toggle.checked, false);
+  toggle.checked = true;
+  toggle.dispatchEvent({ type: 'change', target: toggle });
+  assert.equal(changedConfig.show_weather_legend, true);
+  assert.equal(changedConfig.show_legend, false);
+  editor.setConfig(changedConfig);
+  assert.equal(editor.shadowRoot.getElementById('show_weather_legend').checked, true);
+});
+
+test('colour key button opens exact ranges without a strip and toggles closed with focus returned', async () => {
+  const harness = createHarness();
+  const card = await initializeCard(harness, issueConfig({ layer: 'air_temperature' }));
+  const { button, panel, close, body, title } = card._legendControl;
+  assert.equal(card._config.show_legend_button, true);
+  assert.equal(card.shadowRoot.querySelector('.legend-card'), null);
+  assert.equal(panel.hidden, true);
+  assert.equal(button.getAttribute('aria-controls'), panel.id);
+  button.click();
+  assert.equal(panel.hidden, false);
+  assert.equal(button.getAttribute('aria-expanded'), 'true');
+  assert.equal(close.focused, true);
+  assert.equal(title.textContent, 'Air temperature (°C)');
+  assert.match(body.innerHTML, /&lt; 0 °C/);
+  assert.equal((body.innerHTML.match(/<li>/g) || []).length, 11);
+  close.click();
+  assert.equal(panel.hidden, true);
+  assert.equal(button.focused, true);
+  button.click();
+  button.click();
+  assert.equal(panel.hidden, true);
+  setConnected(card, false);
+});
+
+test('top colour strip works immediately, survives refresh, and reconnects without duplicate triggers', async () => {
+  for (const config of [
+    issueConfig({ show_legend: true }),
+    issueConfig({ layer: 'air_temperature', show_weather_legend: true }),
+  ]) {
+    const harness = createHarness();
+    const card = await initializeCard(harness, config);
+    try {
+      const strip = card.shadowRoot.querySelector('.legend-card');
+      const trigger = card.shadowRoot.querySelector('.legend-open');
+      assert.ok(trigger, `${config.layer} strip must be interactive on initial load`);
+      trigger.click();
+      assert.equal(card._legendControl.panel.hidden, false);
+      card._legendControl.close.click();
+
+      await card._refreshData();
+      assert.equal(card.shadowRoot.querySelector('.legend-card'), strip);
+      assert.equal(card.shadowRoot.querySelector('.legend-open'), trigger);
+      assert.equal(card.shadowRoot.querySelectorAll('.legend-open').length, 1);
+
+      setConnected(card, false);
+      setConnected(card, true);
+      await flushUntil(() => card._legendControl && timeline(card)?.children.length === config.frame_count);
+      const reconnectedTrigger = card.shadowRoot.querySelector('.legend-open');
+      assert.ok(reconnectedTrigger, 'reconnect must wire the new strip');
+      assert.notEqual(reconnectedTrigger, trigger);
+      assert.equal(card.shadowRoot.querySelectorAll('.legend-open').length, 1);
+      reconnectedTrigger.click();
+      assert.equal(card._legendControl.panel.hidden, false);
+    } finally {
+      setConnected(card, false);
+    }
+  }
+});
+
+test('toolbar and strip expose the same legend state and return focus to the opener', async () => {
+  const harness = createHarness();
+  const card = await initializeCard(harness, issueConfig({
+    show_legend: true,
+    show_weather_legend: true,
+  }));
+  try {
+    await card._setLayer('air_temperature');
+    const strip = card.shadowRoot.querySelector('.legend-open');
+    assert.ok(strip);
+    const key = card._legendControl;
+    const assertExpanded = value => {
+      assert.equal(key.button.getAttribute('aria-expanded'), String(value));
+      assert.equal(strip.getAttribute('aria-expanded'), String(value));
+      assert.equal(key.panel.hidden, !value);
+    };
+    const escape = () => card.shadowRoot.dispatchEvent({ type: 'keydown', key: 'Escape', stopPropagation() {} });
+
+    assertExpanded(false);
+    for (const opener of [key.button, strip]) {
+      for (const dismiss of [() => key.close.click(), escape]) {
+        opener.focus();
+        opener.click();
+        assertExpanded(true);
+        assert.equal(card.shadowRoot.activeElement, key.close);
+        dismiss();
+        assertExpanded(false);
+        assert.ok(harness.document.activeElement === opener, 'focus returns to the opener');
+        assert.equal(opener.focusOptions.preventScroll, true);
+      }
+      opener.click();
+      assertExpanded(true);
+      opener.click();
+      assertExpanded(false);
+      assert.ok(harness.document.activeElement === opener, 'toggling closed restores the opener');
+    }
+  } finally {
+    setConnected(card, false);
+  }
+});
+
+test('closing the key returns to the toolbar when a committed layer removes the opening strip', async () => {
+  const harness = createHarness();
+  const card = await initializeCard(harness, issueConfig({ show_legend: true, show_weather_legend: false }));
+  try {
+    const trigger = card.shadowRoot.querySelector('.legend-open');
+    trigger.click();
+    // A radar strip can be reopened while a forecast request is still pending.
+    card._committedRadarLayerKey = 'air_temperature';
+    card._renderTopOverlays();
+    assert.equal(card.shadowRoot.querySelector('.legend-open'), null);
+    assert.equal(card._legendControl.panel.hidden, false);
+    card._legendControl.close.click();
+    assert.ok(harness.document.activeElement === card._legendControl.button);
+  } finally {
+    setConnected(card, false);
+  }
+});
+
+test('disabling the colour key button retains a static strip through refresh and reconnect', async () => {
+  const harness = createHarness();
+  const config = issueConfig({ show_legend: true, show_legend_button: false });
+  const card = await initializeCard(harness, config);
+  try {
+    for (const transition of [
+      async () => {},
+      () => card._refreshData(),
+      async () => {
+        setConnected(card, false);
+        setConnected(card, true);
+        await flushUntil(() => timeline(card)?.children.length === config.frame_count);
+      },
+    ]) {
+      await transition();
+      assert.ok(card.shadowRoot.querySelector('.legend-card'));
+      assert.equal(card.shadowRoot.querySelector('.legend-open'), null);
+      assert.equal(card._legendControl, null);
+    }
+  } finally {
+    setConnected(card, false);
+  }
+});
+
+test('layer menu supports keyboard dismissal and focus return without the colour key', async () => {
+  const harness = createHarness();
+  const card = await initializeCard(harness, issueConfig({ show_layer_switcher: true, show_legend_button: false }));
+  const { button, panel } = card._layerSwitcher;
+  button.click();
+  assert.equal(panel.querySelector('.is-active').focused, true);
+  let stopped = false;
+  button.parentNode.dispatchEvent({ type: 'keydown', key: 'Escape', stopPropagation() { stopped = true; } });
+  assert.equal(stopped, true);
+  assert.equal(panel.classList.contains('is-open'), false);
+  assert.equal(button.focused, true);
+  assert.equal(button.getAttribute('aria-controls'), panel.id);
+  setConnected(card, false);
+});
+
+test('playback and frame buttons expose their current state', async () => {
+  const harness = createHarness();
+  const card = await initializeCard(harness, issueConfig());
+  const button = card.shadowRoot.getElementById('play-btn');
+  button.click();
+  assert.equal(button.getAttribute('aria-label'), 'Play animation');
+  button.click();
+  assert.equal(button.getAttribute('aria-label'), 'Pause animation');
+  timeline(card).children[0].click();
+  assert.equal(button.getAttribute('aria-label'), 'Play animation');
+  assert.equal(timeline(card).children[0].getAttribute('aria-pressed'), 'true');
+  assert.ok(timeline(card).children.slice(1).every(dot => dot.getAttribute('aria-pressed') === 'false'));
+  setConnected(card, false);
+});
+
+test('toolbar disappears when empty and returns for colour-bearing layers or other enabled actions', async () => {
+  const harness = createHarness();
+  const card = await initializeCard(harness, issueConfig());
+  const toolbar = harness.document.createElement('div');
+  toolbar.className = 'leaflet-top leaflet-right';
+  card.shadowRoot.getElementById('map').appendChild(toolbar);
+  card._renderTopOverlays();
+  assert.equal(toolbar.hidden, false);
+  card._committedRadarLayerKey = 'wind_direction';
+  card._renderTopOverlays();
+  assert.equal(toolbar.hidden, true);
+  for (const action of ['show_zoom', 'show_recenter', 'show_layer_switcher']) {
+    card._config[action] = true;
+    card._syncMapToolbar();
+    assert.equal(toolbar.hidden, false, `${action} must remain visible on direction layers`);
+    card._config[action] = false;
+  }
+  card._committedRadarLayerKey = 'reflectivity';
+  card._renderTopOverlays();
+  assert.equal(toolbar.hidden, false);
+  setConnected(card, false);
+
+  const disabled = await initializeCard(harness, issueConfig({ show_legend_button: false }));
+  disabled.shadowRoot.getElementById('map').appendChild(toolbar);
+  disabled._syncMapToolbar();
+  assert.equal(toolbar.hidden, true);
+  setConnected(disabled, false);
+});
+
+test('layer grid fits the visible card, reserves playback space, and does not scroll the page on focus', async () => {
+  const harness = createHarness();
+  const card = await initializeCard(harness, issueConfig({ show_layer_switcher: true, show_playback: true }));
+  const content = card.shadowRoot.querySelector('.card-content');
+  const { panel, button } = card._layerSwitcher;
+  content.getBoundingClientRect = () => ({ left: 100, right: 458, top: -70, bottom: 230 });
+  button.click();
+  assert.equal(panel.style.maxHeight, '158px');
+  assert.equal(panel.style.width, '342px');
+  assert.equal(panel.style.top, '78px');
+  assert.equal(panel.querySelector('.is-active').focusOptions.preventScroll, true);
+  card._config.show_playback = false;
+  card._fitLayerSwitcherPanel();
+  assert.equal(panel.style.maxHeight, '214px');
+  content.getBoundingClientRect = () => ({ left: 100, right: 105, top: 770, bottom: 780 });
+  card._fitLayerSwitcherPanel();
+  assert.equal(panel.style.maxHeight, '0px');
+  assert.equal(panel.style.width, '0px');
+  assert.equal(harness.window.listenerCount('scroll'), 1);
+  const layerPanel = panel;
+  assert.equal(layerPanel.parentNode, content);
+  setConnected(card, false);
+  assert.equal(harness.window.listenerCount('scroll'), 0);
+  assert.equal(layerPanel.parentNode, null);
+});
+
+test('tapping a different card colour strip dismisses this card key', async () => {
+  const harness = createHarness();
+  const first = await initializeCard(harness, issueConfig({ show_legend: true }));
+  const second = await initializeCard(harness, issueConfig({ show_legend: true }));
+  try {
+    first._legendControl.button.click();
+    first._panelPointerHandler({ composedPath: () => [first.shadowRoot.querySelector('.legend-open')] });
+    assert.equal(first._legendControl.panel.hidden, false);
+    first._panelPointerHandler({ composedPath: () => [second.shadowRoot.querySelector('.legend-open')] });
+    assert.equal(first._legendControl.panel.hidden, true);
+  } finally {
+    setConnected(first, false);
+    setConnected(second, false);
+  }
+});
+
+test('short cards adapt the toolbar using the enabled controls and available height', async () => {
+  const harness = createHarness();
+  const card = await initializeCard(harness, issueConfig({ show_zoom: true, show_recenter: true, show_layer_switcher: true, show_playback: true }));
+  try {
+    const toolbar = harness.document.createElement('div');
+    toolbar.className = 'leaflet-top leaflet-right';
+    card.shadowRoot.getElementById('map').appendChild(toolbar);
+    const content = card.shadowRoot.querySelector('.card-content');
+    let height = 150;
+    content.getBoundingClientRect = () => ({ left: 0, top: 0, right: 320, bottom: height });
+    card._syncMapToolbar();
+    assert.equal(content.classList.contains('has-short-toolbar'), true);
+    height = 300;
+    card._syncMapToolbar();
+    assert.equal(content.classList.contains('has-short-toolbar'), false);
+    height = 150;
+    card._config.show_zoom = card._config.show_recenter = card._config.show_layer_switcher = false;
+    card._syncMapToolbar();
+    assert.equal(content.classList.contains('has-short-toolbar'), false);
+  } finally {
+    setConnected(card, false);
+  }
+});
+
+test('short panels temporarily use playback space and restore it on close or resize', async () => {
+  const harness = createHarness();
+  const card = await initializeCard(harness, issueConfig({ show_layer_switcher: true, show_playback: true, show_legend: true }));
+  try {
+    const content = card.shadowRoot.querySelector('.card-content');
+    let height = 150;
+    content.getBoundingClientRect = () => ({ left: 0, top: 0, right: 320, bottom: height });
+    for (const control of [card._layerSwitcher, card._legendControl]) {
+      control.button.click();
+      assert.equal(content.classList.contains('panel-covers-playback'), true);
+      assert.equal(control.panel.style.maxHeight, '128px');
+      height = 300;
+      card._fitLayerSwitcherPanel();
+      assert.equal(content.classList.contains('panel-covers-playback'), false);
+      height = 150;
+      card._fitLayerSwitcherPanel();
+      control.close.click();
+      assert.equal(content.classList.contains('panel-covers-playback'), false);
+      control.button.click();
+      control.button.click();
+      assert.equal(content.classList.contains('panel-covers-playback'), false, 'toggle close also restores playback');
+    }
+  } finally {
+    setConnected(card, false);
+  }
+});
+
+test('short narrow toolbars wrap full-size desktop and touch targets within the card width', async () => {
+  for (const coarse of [false, true]) {
+    const harness = createHarness({ renderControlContainers: true });
+    harness.window.matchMedia = query => ({ matches: coarse && query === '(pointer: coarse)' });
+    const card = await initializeCard(harness, issueConfig({ show_zoom: true, show_recenter: true,
+      show_layer_switcher: true, show_playback: true, show_attribution: true, show_legend: true }));
+    const content = card.shadowRoot.querySelector('.card-content');
+    const size = coarse ? 44 : 36;
+    for (const width of [160, 180, 320]) {
+      content.getBoundingClientRect = () => ({ left: 0, top: 0, right: width, bottom: 220, width, height: 220 });
+      card._syncMapToolbar();
+      assert.equal(content.classList.contains('has-short-toolbar'), true);
+      const columns = Number(content.style['--bom-toolbar-columns']);
+      const expectedRows = Math.ceil(5 / Math.floor((width - 22) / size));
+      const expectedColumns = Math.ceil(5 / expectedRows);
+      assert.equal(columns, expectedColumns);
+      if (width === 180) assert.equal(columns, 3, 'five controls balance into three plus two rather than four plus one');
+      assert.ok(columns * size + 22 <= width, `${width}px card preserves ${size}px targets without horizontal clipping`);
+      assert.equal(content.style['--bom-toolbar-height'], `${Math.ceil(5 / columns) * size + 6}px`, 'badge offset includes every wrapped row');
+    }
+    card._config.show_zoom = false;
+    card._syncMapToolbar();
+    assert.equal(content.style['--bom-toolbar-columns'], '3');
+    assert.equal(content.style['--bom-toolbar-height'], `${size + 6}px`);
+    setConnected(card, false);
+  }
+});
+
+test('compact labels hide for chrome collisions or card overflow and recover without visibility oscillation', async () => {
+  const harness = createHarness({ renderControlContainers: true });
+  const card = await initializeCard(harness, issueConfig({ show_layer_label: true, show_attribution: true,
+    show_layer_switcher: true }));
+  const content = card.shadowRoot.querySelector('.card-content');
+  const badge = content.querySelector('.layer-badge');
+  const rect = (left, top, right, bottom) => ({ left, top, right, bottom, width: right - left, height: bottom - top });
+  const toolbar = content.querySelector('.leaflet-top.leaflet-right');
+  const playback = content.querySelector('.controls');
+  const credits = content.querySelector('.leaflet-control-attribution');
+  let height = 150;
+  let labelRect = rect(8, 68, 240, 90);
+  content.getBoundingClientRect = () => rect(0, 0, 320, height);
+  badge.getBoundingClientRect = () => labelRect;
+  toolbar.getBoundingClientRect = () => rect(80, 8, 312, 58);
+  playback.getBoundingClientRect = () => rect(8, height - 58, 312, height - 8);
+  credits.getBoundingClientRect = () => rect(90, height - 85, 320, height - 60);
+  const resize = harness.observerState.resize[0];
+  assert.equal(resize.observations.some(({ target }) => target === credits), true, 'credit wrapping and font changes trigger layout checks');
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    resize.callback();
+    assert.equal(content.classList.contains('has-crowded-label'), true);
+  }
+  height = 220;
+  resize.callback();
+  assert.equal(content.classList.contains('has-crowded-label'), false, 'more vertical space restores the label');
+  labelRect = rect(8, 148, 240, 170);
+  card._syncLayerBadgeVisibility();
+  assert.equal(content.classList.contains('has-crowded-label'), true, 'playback overlap hides the label');
+  content.classList.add('panel-covers-playback');
+  card._syncLayerBadgeVisibility();
+  assert.equal(content.classList.contains('has-crowded-label'), true, 'temporarily covered playback retains its reserved space');
+  content.classList.remove('panel-covers-playback');
+  labelRect = rect(8, 8, 240, 30);
+  card._syncLayerBadgeVisibility();
+  assert.equal(content.classList.contains('has-crowded-label'), true, 'toolbar overlap hides the label');
+  labelRect = rect(-1, 68, 240, 90);
+  card._syncLayerBadgeVisibility();
+  assert.equal(content.classList.contains('has-crowded-label'), true, 'outside-card labels stay hidden');
+  labelRect = rect(8, 68, 240, 90);
+  card._syncLayerBadgeVisibility();
+  assert.equal(content.classList.contains('has-crowded-label'), false);
+  credits.getBoundingClientRect = () => rect(90, 70, 320, 160);
+  resize.callback();
+  assert.equal(content.classList.contains('has-crowded-label'), true, 'newly wrapped provider credits are protected');
+  setConnected(card, false);
+  assert.equal(resize.disconnected, true);
+});
+
+test('newly rendered layer labels are checked immediately and hidden titles stay measurable', async () => {
+  const harness = createHarness({ renderControlContainers: true });
+  const card = await initializeCard(harness, issueConfig({ show_layer_label: true, show_layer_switcher: true }));
+  const content = card.shadowRoot.querySelector('.card-content');
+  const rect = (left, top, right, bottom) => ({ left, top, right, bottom, width: right - left, height: bottom - top });
+  content.getBoundingClientRect = () => rect(0, 0, 320, 220);
+  content.querySelector('.leaflet-top.leaflet-right').getBoundingClientRect = () => rect(90, 8, 312, 58);
+  content.querySelector('.controls').getBoundingClientRect = () => rect(8, 162, 312, 212);
+  let labelRect = rect(8, 148, 240, 170);
+  const createElement = harness.document.createElement.bind(harness.document);
+  harness.document.createElement = localName => {
+    const element = createElement(localName);
+    const defaultRect = element.getBoundingClientRect.bind(element);
+    element.getBoundingClientRect = () => element.classList.contains('layer-badge') ? labelRect : defaultRect();
+    return element;
+  };
+  card._renderTopOverlays();
+  assert.equal(content.classList.contains('has-crowded-label'), true);
+  assert.equal(content.querySelector('.layer-badge').getBoundingClientRect().height, 22);
+  labelRect = rect(8, 68, 240, 90);
+  card._renderTopOverlays();
+  assert.equal(content.classList.contains('has-crowded-label'), false, 'a replacement title is assessed against current geometry');
+  card._config.show_layer_label = false;
+  card._renderTopOverlays();
+  assert.equal(content.classList.contains('has-crowded-label'), false);
+  setConnected(card, false);
+});
+
+test('touch toolbar reserves room for provider credits above playback', async () => {
+  const harness = createHarness();
+  harness.window.matchMedia = query => ({ matches: query === '(pointer: coarse)' });
+  const card = await initializeCard(harness, issueConfig({ show_zoom: true, show_recenter: true,
+    show_layer_switcher: true, show_playback: true, show_attribution: true, show_legend: true }));
+  try {
+    const toolbar = harness.document.createElement('div');
+    toolbar.className = 'leaflet-top leaflet-right';
+    card.shadowRoot.getElementById('map').appendChild(toolbar);
+    const credit = harness.document.createElement('div');
+    credit.className = 'leaflet-control-attribution';
+    card.shadowRoot.getElementById('map').appendChild(credit);
+    credit.getBoundingClientRect = () => ({ height: 18 });
+    const content = card.shadowRoot.querySelector('.card-content');
+    content.getBoundingClientRect = () => ({ top: 0, bottom: 300 });
+    card._syncMapToolbar();
+    assert.equal(content.classList.contains('has-short-toolbar'), true);
+    card._config.show_attribution = false;
+    card._syncMapToolbar();
+    assert.equal(content.classList.contains('has-short-toolbar'), false);
+    card._config.show_attribution = true;
+    content.getBoundingClientRect = () => ({ top: 0, bottom: 400 });
+    card._syncMapToolbar();
+    assert.equal(content.classList.contains('has-short-toolbar'), false);
+    credit.getBoundingClientRect = () => ({ height: 120 });
+    card._syncMapToolbar();
+    assert.equal(content.classList.contains('has-short-toolbar'), true, 'wrapped multi-provider credits are measured');
+  } finally {
+    setConnected(card, false);
+  }
+});
+
+test('colour key closes on Escape and map interaction; panels are mutually exclusive', async () => {
+  const harness = createHarness();
+  const card = await initializeCard(harness, issueConfig({ show_layer_switcher: true }));
+  const key = card._legendControl;
+  assert.equal(key.button.parentNode, card._layerSwitcher.button.parentNode);
+  key.button.click();
+  let stopped = false;
+  card.shadowRoot.dispatchEvent({ type: 'keydown', key: 'Escape', stopPropagation() { stopped = true; } });
+  assert.equal(stopped, true);
+  assert.equal(key.panel.hidden, true);
+  assert.equal(key.button.getAttribute('aria-expanded'), 'false');
+  key.button.click();
+  card._layerSwitcher.button.click();
+  assert.equal(key.panel.hidden, true);
+  assert.equal(card._layerSwitcher.panel.classList.contains('is-open'), true);
+  key.button.click();
+  assert.equal(card._layerSwitcher.panel.classList.contains('is-open'), false);
+  for (const event of ['click', 'movestart', 'zoomstart']) {
+    if (key.panel.hidden) key.button.click();
+    const handlers = card._map.events[event];
+    assert.ok(handlers.length);
+    handlers.forEach(handler => handler());
+    assert.equal(key.panel.hidden, true);
+  }
+  setConnected(card, false);
+});
+
+test('colour key stays on the displayed product, preserves same-layer content, and hides for directions', async () => {
+  const harness = createHarness();
+  const card = await initializeCard(harness, issueConfig({ layer: 'air_temperature' }));
+  const key = card._legendControl;
+  key.button.click();
+  key.body.scrollTop = 50;
+  card._renderTopOverlays();
+  assert.equal(key.body.scrollTop, 50);
+  card._config.layer = 'wind_speed_kt';
+  card._renderTopOverlays();
+  assert.equal(key.panel.dataset.layer, 'air_temperature');
+  card._committedRadarLayerKey = 'wind_speed_kt';
+  card._renderTopOverlays();
+  assert.equal(key.panel.hidden, false);
+  assert.equal(key.panel.dataset.layer, 'wind_speed_kt');
+  assert.match(key.body.innerHTML, /55 kt/);
+  assert.equal(key.body.scrollTop, 0);
+  card._committedRadarLayerKey = 'wind_direction';
+  card._renderTopOverlays();
+  assert.equal(key.button.hidden, true);
+  assert.equal(key.panel.hidden, true);
+  card._committedRadarLayerKey = 'fog';
+  card._renderTopOverlays();
+  assert.equal(key.button.hidden, false);
+  assert.equal((key.body.innerHTML.match(/<li>/g) || []).length, 1);
+  assert.equal(key.title.textContent, 'Fog');
+  setConnected(card, false);
+});
+
+test('colour key is optional, cleans up on disconnect, and starts closed on reconnect', async () => {
+  const harness = createHarness();
+  const disabled = await initializeCard(harness, issueConfig({ show_legend_button: false }));
+  assert.equal(disabled._legendControl, null);
+  setConnected(disabled, false);
+  const card = await initializeCard(harness, issueConfig());
+  const key = card._legendControl;
+  key.button.click();
+  setConnected(card, false);
+  assert.equal(card._legendControl, null);
+  assert.equal(key.panel.parentNode, null);
+  assert.equal(card.shadowRoot.eventListeners.keydown.length, 0);
+  setConnected(card, true);
+  await flushUntil(() => card._legendControl && card._committedRadarLayerKey === 'reflectivity');
+  assert.notEqual(card._legendControl, key);
+  assert.equal(card._legendControl.panel.hidden, true);
+  assert.equal(card.shadowRoot.eventListeners.keydown.length, 1);
+  setConnected(card, false);
+});
+
+test('editor saves the colour-key-button preference independently', () => {
+  const harness = createHarness();
+  const editor = new harness.Editor();
+  let config;
+  editor.addEventListener('config-changed', event => { config = event.detail.config; });
+  editor.setConfig(issueConfig());
+  const button = editor.shadowRoot.getElementById('show_legend_button');
+  assert.equal(button.checked, true);
+  button.checked = false;
+  button.dispatchEvent({ type: 'change', target: button });
+  assert.equal(config.show_legend_button, false);
+  editor.setConfig(config);
+  assert.equal(editor.shadowRoot.getElementById('show_legend_button').checked, false);
+});
+
+function dispatchToolbarActivity(target, type, leaf, properties = {}) {
+  const path = [];
+  for (let node = leaf; node; node = node.parentNode) path.push(node);
+  const event = {
+    type, target: leaf, pointerId: 1, pointerType: 'mouse',
+    composedPath: () => path,
+    preventDefault() { this.defaultPrevented = true; },
+    stopImmediatePropagation() { this.propagationStopped = true; },
+    ...properties,
+  };
+  target.dispatchEvent(event);
+  return event;
+}
+
+test('auto-hide is opt-in and applies one chrome-wide idle state after ten seconds', async () => {
+  const harness = createHarness({ renderControlContainers: true });
+  const defaultCard = await initializeCard(harness, issueConfig());
+  assert.equal(defaultCard._config.auto_hide_controls, false);
+  assert.equal(defaultCard._autoHideControls, null);
+  assert.equal(harness.scheduler.activeTimeoutDelays().includes(10_000), false);
+  setConnected(defaultCard, false);
+
+  const card = await initializeCard(harness, issueConfig({ auto_hide_controls: true }));
+  const content = card.shadowRoot.querySelector('.card-content');
+  const map = card.shadowRoot.getElementById('map');
+  const controls = card.shadowRoot.querySelector('.controls');
+  harness.scheduler.runNextTimeout(10_000);
+  assert.equal(content.classList.contains('is-idle'), true);
+  assert.equal(controls.classList.contains('is-idle'), false);
+  assert.equal(card.shadowRoot.getElementById('time-label').textContent.length > 0, true);
+  dispatchToolbarActivity(content, 'pointermove', map);
+  assert.equal(content.classList.contains('is-idle'), false);
+  assert.equal(harness.scheduler.activeTimeoutDelays().filter(delay => delay === 10_000).length, 1);
+  setConnected(card, false);
+});
+
+test('first hidden-chrome tap consumes the complete pointer and compatibility gesture only', async () => {
+  const harness = createHarness({ renderControlContainers: true });
+  const card = await initializeCard(harness, issueConfig({ auto_hide_controls: true }));
+  const content = card.shadowRoot.querySelector('.card-content');
+  const map = card.shadowRoot.getElementById('map');
+  harness.scheduler.runNextTimeout(10_000);
+  dispatchToolbarActivity(content, 'pointermove', map, { pointerType: 'touch' });
+  assert.equal(content.classList.contains('is-idle'), true, 'touch pre-hover must not bypass the first-tap guard');
+  const down = dispatchToolbarActivity(content, 'pointerdown', map, { pointerType: 'touch' });
+  assert.equal(down.defaultPrevented, true);
+  assert.equal(down.propagationStopped, true);
+  assert.equal(content.classList.contains('is-idle'), false);
+  for (const type of ['touchstart', 'mousedown', 'touchmove']) {
+    assert.equal(dispatchToolbarActivity(content, type, map).defaultPrevented, true, type);
+  }
+  assert.equal(harness.scheduler.activeTimeoutDelays().includes(10_000), false);
+  assert.equal(dispatchToolbarActivity(harness.window, 'pointerup', map).defaultPrevented, true);
+  for (const type of ['touchend', 'mouseup', 'click', 'dblclick']) {
+    assert.equal(dispatchToolbarActivity(content, type, map).defaultPrevented, true, type);
+  }
+  assert.equal(dispatchToolbarActivity(content, 'pointerdown', map).defaultPrevented, undefined);
+  assert.equal(dispatchToolbarActivity(content, 'mousedown', map).defaultPrevented, undefined);
+  dispatchToolbarActivity(harness.window, 'pointerup', map);
+  assert.equal(dispatchToolbarActivity(content, 'click', map).defaultPrevented, undefined);
+  setConnected(card, false);
+});
+
+test('hidden playback and attribution wake only, while the visible colour strip opens its key directly', async () => {
+  const harness = createHarness({ renderControlContainers: true });
+  const card = await initializeCard(harness, issueConfig({ auto_hide_controls: true, show_legend: true }));
+  const content = card.shadowRoot.querySelector('.card-content');
+  const map = card.shadowRoot.getElementById('map');
+  const attribution = harness.document.createElement('a');
+  attribution.className = 'leaflet-control-attribution';
+  map.appendChild(attribution);
+  const playback = card.shadowRoot.getElementById('play-btn');
+  const strip = card.shadowRoot.querySelector('.legend-open');
+  for (const leaf of [playback, attribution]) {
+    harness.scheduler.runNextTimeout(10_000);
+    assert.equal(dispatchToolbarActivity(content, 'pointerdown', leaf).defaultPrevented, true);
+    dispatchToolbarActivity(harness.window, 'pointerup', leaf);
+    assert.equal(dispatchToolbarActivity(content, 'click', leaf).defaultPrevented, true);
+    assert.equal(content.classList.contains('is-idle'), false);
+    assert.equal(card._playing, true, 'the wake tap does not pause playback');
+    assert.equal(dispatchToolbarActivity(content, 'pointerdown', leaf).defaultPrevented, undefined);
+    dispatchToolbarActivity(harness.window, 'pointerup', leaf);
+    assert.equal(dispatchToolbarActivity(content, 'click', leaf).defaultPrevented, undefined);
+  }
+  playback.click();
+  assert.equal(card._playing, false, 'playback still responds');
+  harness.scheduler.runNextTimeout(10_000);
+  assert.equal(dispatchToolbarActivity(content, 'pointerdown', strip).defaultPrevented, undefined);
+  dispatchToolbarActivity(harness.window, 'pointerup', strip);
+  assert.equal(dispatchToolbarActivity(content, 'click', strip).defaultPrevented, undefined);
+  strip.click();
+  assert.equal(card._legendControl.panel.hidden, false, 'colour strip still opens its key');
+  assert.equal(content.classList.contains('is-idle'), false);
+  setConnected(card, false);
+});
+
+test('auto-hide holds all chrome for open panels, control focus and map movement', async () => {
+  const harness = createHarness({ renderControlContainers: true });
+  const card = await initializeCard(harness, issueConfig({ auto_hide_controls: true, show_layer_switcher: true }));
+  const content = card.shadowRoot.querySelector('.card-content');
+  const mapElement = card.shadowRoot.getElementById('map');
+  card._legendControl.button.click();
+  assert.equal(harness.scheduler.activeTimeoutDelays().includes(10_000), false);
+  card._closeLegendPanel();
+  card.shadowRoot.activeElement = mapElement;
+  dispatchToolbarActivity(content, 'focusout', card._legendControl.button, { relatedTarget: mapElement });
+  card._layerSwitcher.button.click();
+  assert.equal(harness.scheduler.activeTimeoutDelays().includes(10_000), false);
+  card._closeLayerSwitcher();
+  card.shadowRoot.activeElement = mapElement;
+  dispatchToolbarActivity(content, 'focusout', card._layerSwitcher.button, { relatedTarget: mapElement });
+  harness.scheduler.runNextTimeout(10_000);
+  assert.equal(content.classList.contains('is-idle'), true);
+  card._legendControl.button.focusVisible = true;
+  card._legendControl.button.focus();
+  dispatchToolbarActivity(content, 'focusin', card._legendControl.button);
+  assert.equal(content.classList.contains('is-idle'), false);
+  assert.equal(harness.scheduler.activeTimeoutDelays().includes(10_000), false);
+  dispatchToolbarActivity(content, 'focusout', card._legendControl.button, { relatedTarget: mapElement });
+  card.shadowRoot.activeElement = mapElement;
+  harness.scheduler.runNextTimeout(0);
+  assert.equal(harness.scheduler.activeTimeoutDelays().includes(10_000), true);
+  card._map.events.movestart.forEach(listener => listener());
+  card._map.events.zoomstart.forEach(listener => listener());
+  assert.equal(harness.scheduler.activeTimeoutDelays().includes(10_000), false);
+  card._map.events.moveend.forEach(listener => listener());
+  assert.equal(harness.scheduler.activeTimeoutDelays().includes(10_000), false, 'zoom still holds the controls');
+  await Promise.all(card._map.events.zoomend.map(listener => listener()));
+  harness.scheduler.runNextTimeout(10_000);
+  assert.equal(content.classList.contains('is-idle'), true);
+  setConnected(card, false);
+});
+
+test('auto-hide waits for drag release outside the card and clears cancelled gestures', async () => {
+  const harness = createHarness({ renderControlContainers: true });
+  const card = await initializeCard(harness, issueConfig({ auto_hide_controls: true }));
+  const content = card.shadowRoot.querySelector('.card-content');
+  const map = card.shadowRoot.getElementById('map');
+  dispatchToolbarActivity(content, 'pointerdown', map);
+  assert.equal(harness.scheduler.activeTimeoutDelays().includes(10_000), false);
+  dispatchToolbarActivity(harness.window, 'pointerup', harness.document);
+  harness.scheduler.runNextTimeout(10_000);
+  dispatchToolbarActivity(content, 'pointerdown', map);
+  dispatchToolbarActivity(harness.window, 'pointercancel', map);
+  assert.equal(dispatchToolbarActivity(content, 'click', map).defaultPrevented, undefined);
+  dispatchToolbarActivity(content, 'pointerdown', map);
+  harness.window.dispatchEvent({ type: 'blur' });
+  assert.equal(harness.scheduler.activeTimeoutDelays().includes(10_000), true);
+  setConnected(card, false);
+});
+
+test('keyboard focus on playback, frames or map credits reveals and holds all chrome, but map focus does not', async () => {
+  const harness = createHarness({ renderControlContainers: true });
+  const card = await initializeCard(harness, issueConfig({ auto_hide_controls: true }));
+  const content = card.shadowRoot.querySelector('.card-content');
+  const map = card.shadowRoot.getElementById('map');
+  const credits = harness.document.createElement('div');
+  credits.className = 'leaflet-control-attribution';
+  const link = harness.document.createElement('a');
+  credits.appendChild(link);
+  map.appendChild(credits);
+  for (const control of [card.shadowRoot.getElementById('play-btn'), timeline(card).children[0], link]) {
+    harness.scheduler.runNextTimeout(10_000);
+    assert.equal(content.classList.contains('is-idle'), true);
+    control.focusVisible = true;
+    control.focus();
+    dispatchToolbarActivity(content, 'focusin', control);
+    assert.equal(content.classList.contains('is-idle'), false);
+    assert.equal(harness.scheduler.activeTimeoutDelays().includes(10_000), false);
+    map.focus();
+    dispatchToolbarActivity(content, 'focusout', control, { relatedTarget: map });
+    assert.equal(harness.scheduler.activeTimeoutDelays().includes(10_000), true);
+  }
+  harness.scheduler.runNextTimeout(10_000);
+  assert.equal(content.classList.contains('is-idle'), true);
+  setConnected(card, false);
+});
+
+test('auto-hide still controls playback when every toolbar action is disabled', async () => {
+  const harness = createHarness();
+  const card = await initializeCard(harness, issueConfig({ auto_hide_controls: true, show_legend_button: false }));
+  const content = card.shadowRoot.querySelector('.card-content');
+  assert.ok(card._autoHideControls);
+  harness.scheduler.runNextTimeout(10_000);
+  assert.equal(content.classList.contains('is-idle'), true);
+  const play = card.shadowRoot.getElementById('play-btn');
+  assert.equal(dispatchToolbarActivity(content, 'pointerdown', play).defaultPrevented, true);
+  dispatchToolbarActivity(harness.window, 'pointerup', play);
+  assert.equal(dispatchToolbarActivity(content, 'click', play).defaultPrevented, true);
+  assert.equal(card._playing, true);
+  setConnected(card, false);
+});
+
+test('pointer-focused playback and layer-picker return focus do not pin the chrome open', async () => {
+  const harness = createHarness({ renderControlContainers: true });
+  const card = await initializeCard(harness, issueConfig({ auto_hide_controls: true, show_layer_switcher: true }));
+  const content = card.shadowRoot.querySelector('.card-content');
+  const playback = card.shadowRoot.getElementById('play-btn');
+  dispatchToolbarActivity(content, 'pointerdown', playback, { pointerType: 'touch' });
+  playback.focus();
+  dispatchToolbarActivity(content, 'focusin', playback);
+  dispatchToolbarActivity(harness.window, 'pointerup', playback, { pointerType: 'touch' });
+  playback.click();
+  assert.equal(playback.matches(':focus-visible'), false);
+  harness.scheduler.runNextTimeout(10_000);
+  assert.equal(content.classList.contains('is-idle'), true);
+  card._autoHideControls.activity();
+  card._layerSwitcher.button.click();
+  await card._setLayer('reflectivity');
+  assert.equal(card.shadowRoot.activeElement, card._layerSwitcher.button);
+  assert.equal(card._layerSwitcher.button.matches(':focus-visible'), false);
+  harness.scheduler.runNextTimeout(10_000);
+  assert.equal(content.classList.contains('is-idle'), true);
+  setConnected(card, false);
+});
+
+test('Escape-returned keyboard-visible panel focus keeps the chrome visible', async () => {
+  const harness = createHarness({ renderControlContainers: true });
+  const card = await initializeCard(harness, issueConfig({ auto_hide_controls: true }));
+  const { button } = card._legendControl;
+  button.focusVisible = true;
+  button.click();
+  card.shadowRoot.dispatchEvent({ type: 'keydown', key: 'Escape', stopPropagation() {} });
+  assert.equal(card.shadowRoot.activeElement, button);
+  assert.equal(button.matches(':focus-visible'), true);
+  assert.equal(harness.scheduler.activeTimeoutDelays().includes(10_000), false);
+  assert.equal(card.shadowRoot.querySelector('.card-content').classList.contains('is-idle'), false);
+  setConnected(card, false);
+});
+
+test('auto-hide never starts during unresolved loading or an initialization error', async () => {
+  for (const options of [{ imageResponder: () => undefined }, { tileLayerThrows: true }]) {
+    const harness = createHarness(options);
+    const card = new harness.Card();
+    card.setConfig(issueConfig({ auto_hide_controls: true }));
+    card.hass = issueHass();
+    setConnected(card, true);
+    for (let attempt = 0; attempt < 40; attempt += 1) await Promise.resolve();
+    assert.equal(card._autoHideControls, null);
+    assert.equal(harness.scheduler.activeTimeoutDelays().includes(10_000), false);
+    assert.equal(card.shadowRoot.querySelector('.card-content').classList.contains('is-idle'), false);
+    const loading = card.shadowRoot.getElementById('loading');
+    assert.ok(loading);
+    assert.equal(loading.classList.contains('hidden'), false);
+    if (options.tileLayerThrows) assert.match(loading.innerHTML, /Failed to load/);
+    setConnected(card, false);
+  }
+});
+
+test('auto-hide config changes and reconnects clean up every timer and listener', async () => {
+  const harness = createHarness({ renderControlContainers: true });
+  const card = await initializeCard(harness, issueConfig({ auto_hide_controls: true }));
+  const oldContent = card.shadowRoot.querySelector('.card-content');
+  assert.equal(oldContent.eventListeners.pointerdown.length, 1);
+  assert.equal(harness.window.listenerCount('pointerup'), 1);
+  harness.scheduler.runNextTimeout(10_000);
+  dispatchToolbarActivity(oldContent, 'pointerdown', card.shadowRoot.getElementById('map'));
+  dispatchToolbarActivity(harness.window, 'pointerup', card.shadowRoot.getElementById('map'));
+  assert.equal(harness.scheduler.activeTimeoutDelays().includes(700), true);
+  setConnected(card, false);
+  assert.equal(harness.scheduler.activeTimeoutDelays().includes(10_000), false);
+  assert.equal(harness.scheduler.activeTimeoutDelays().includes(700), false);
+  assert.equal(harness.window.listenerCount('pointerup'), 0);
+  assert.equal(harness.window.listenerCount('pointercancel'), 0);
+  assert.equal(harness.window.listenerCount('blur'), 0);
+  for (const listeners of Object.values(oldContent.eventListeners)) assert.equal(listeners.length, 0);
+  setConnected(card, true);
+  await flushUntil(() => card._autoHideControls && card._committedRadarLayerKey === 'reflectivity');
+  assert.equal(harness.window.listenerCount('pointerup'), 1);
+  assert.equal(card.shadowRoot.querySelector('.card-content').classList.contains('is-idle'), false);
+  card.setConfig(issueConfig({ auto_hide_controls: false }));
+  await flushUntil(() => card._committedRadarLayerKey === 'reflectivity');
+  assert.equal(card._autoHideControls, null);
+  assert.equal(harness.window.listenerCount('pointerup'), 0);
+  assert.equal(harness.scheduler.activeTimeoutDelays().includes(10_000), false);
+  setConnected(card, false);
+});
+
+test('editor persists the opt-in auto-hide preference independently of playback', () => {
+  const harness = createHarness();
+  const editor = new harness.Editor();
+  let config;
+  editor.addEventListener('config-changed', event => { config = event.detail.config; });
+  editor.setConfig(issueConfig());
+  const toggle = editor.shadowRoot.getElementById('auto_hide_controls');
+  assert.equal(toggle.checked, false);
+  toggle.checked = true;
+  toggle.dispatchEvent({ type: 'change', target: toggle });
+  assert.equal(config.auto_hide_controls, true);
+  assert.equal(config.show_playback, true);
+  editor.setConfig(config);
+  assert.equal(editor.shadowRoot.getElementById('auto_hide_controls').checked, true);
+});
+
+test('dashboard theme changes preserve the map, playback and open colour key independently of the basemap', async () => {
+  const harness = createHarness();
+  const hass = { ...issueHass({ 'sun.sun': { state: 'above_horizon' } }), themes: { darkMode: false } };
+  const card = await initializeCard(harness, issueConfig({ basemap_style: 'auto' }), hass);
+  const map = card._map;
+  const frames = timeline(card);
+  const key = card._legendControl;
+  key.button.click();
+  assert.equal(key.panel.hidden, false);
+  assert.equal(card.getAttribute('data-theme'), 'light');
+
+  card.hass = { ...hass, themes: { darkMode: true } };
+  assert.equal(card.getAttribute('data-theme'), 'dark');
+  assert.equal(card._map, map);
+  assert.equal(timeline(card), frames);
+  assert.equal(card._legendControl, key);
+  assert.equal(key.panel.hidden, false);
+  assert.equal(harness.leafletState.maps.length, 1);
+
+  card.hass = hass;
+  assert.equal(card.getAttribute('data-theme'), 'light');
+  assert.equal(card._map, map);
+  assert.equal(key.panel.hidden, false);
+  setConnected(card, false);
+});
+
+test('editor theme changes retain its controls and unsaved field value', () => {
+  const harness = createHarness();
+  const editor = new harness.Editor();
+  editor.hass = { ...issueHass(), themes: { darkMode: false } };
+  editor.setConfig(issueConfig());
+  const height = editor.shadowRoot.getElementById('map_height');
+  height.value = '420';
+  editor.hass = { ...issueHass(), themes: { darkMode: true } };
+  assert.equal(editor.getAttribute('data-theme'), 'dark');
+  assert.equal(editor.shadowRoot.getElementById('map_height'), height);
+  assert.equal(height.value, '420');
+});
+
+test('editor opacity percentages round-trip as fractional configuration, including defaults and clearing', () => {
+  const harness = createHarness();
+  const editor = new harness.Editor();
+  let config;
+  editor.addEventListener('config-changed', event => { config = event.detail.config; });
+  editor.setConfig(issueConfig({ radar_opacity: 0.65, chrome_opacity: 0.85 }));
+  const weather = editor.shadowRoot.getElementById('radar_opacity');
+  const controls = editor.shadowRoot.getElementById('chrome_opacity');
+  assert.equal(weather.value, '65');
+  assert.equal(controls.value, '85');
+  weather.value = '45';
+  controls.value = '20';
+  weather.dispatchEvent({ type: 'change', target: weather });
+  assert.equal(config.radar_opacity, 0.45);
+  assert.equal(config.chrome_opacity, 0.2);
+  editor.setConfig(config);
+  assert.equal(editor.shadowRoot.getElementById('radar_opacity').value, '45');
+  assert.equal(editor.shadowRoot.getElementById('chrome_opacity').value, '20');
+  const updatedWeather = editor.shadowRoot.getElementById('radar_opacity');
+  updatedWeather.value = '';
+  updatedWeather.dispatchEvent({ type: 'change', target: updatedWeather });
+  assert.equal(Object.hasOwn(config, 'radar_opacity'), false);
+  editor.setConfig(issueConfig());
+  assert.equal(editor.shadowRoot.getElementById('radar_opacity').value, '70');
+  assert.equal(editor.shadowRoot.getElementById('chrome_opacity').value, '100');
+});
+
+test('new custom accents start with a readable theme neutral and preserve an existing colour', () => {
+  const harness = createHarness();
+  for (const [darkMode, expected] of [[false, '#26384b'], [true, '#edf1f5']]) {
+    const editor = new harness.Editor();
+    editor.hass = { ...issueHass(), themes: { darkMode } };
+    editor.setConfig(issueConfig());
+    let config;
+    editor.addEventListener('config-changed', event => { config = event.detail.config; });
+    const toggle = editor.shadowRoot.getElementById('use_custom_accent_color');
+    toggle.checked = true;
+    toggle.dispatchEvent({ type: 'change', target: toggle });
+    assert.equal(config.accent_color, expected);
+    editor.setConfig({ ...config, accent_color: '#2468ac' });
+    editor._valueChanged();
+    assert.equal(config.accent_color, '#2468ac');
   }
 });
 

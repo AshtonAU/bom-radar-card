@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>BOM card · colour key comparison</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 24px; background: #15171b; color: #edf0f4; font: 14px/1.5 system-ui, sans-serif; }
+  main { max-width: 1060px; margin: auto; }
+  h1 { margin: 0 0 4px; font-size: 22px; font-weight: 600; }
+  p { color: #b9c0ca; margin: 0 0 20px; }
+  .settings { display: flex; flex-wrap: wrap; gap: 16px; align-items: center; margin: 0 0 24px; }
+  select, button { font: inherit; background: #272b32; color: inherit; padding: 7px 10px; border: 1px solid #565e6b; border-radius: 4px; }
+  select:focus-visible, button:focus-visible { outline: 2px solid white; outline-offset: 2px; }
+  .comparison { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; align-items: start; }
+  .comparison.narrow { grid-template-columns: repeat(2, 320px); }
+  h2 { font-size: 14px; font-weight: 500; margin: 0 0 8px; }
+  ha-card { display: block; }
+  .caption { margin-top: 10px; font-size: 12px; }
+  #checks { font: 12px/1.5 monospace; white-space: pre-wrap; margin-top: 24px; color: #b9c0ca; }
+  #radar-example { margin-top: 24px; }
+  #radar-bands { list-style: none; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(105px, 1fr)); gap: 12px; }
+  #radar-bands li { font-size: 12px; }
+  #radar-bands .swatch { display: block; height: 12px; margin-bottom: 4px; }
+  @media(max-width: 720px) { body { padding: 16px; } .comparison, .comparison.narrow { grid-template-columns: minmax(0,1fr); } }
+</style>
+<main>
+  <h1>A quieter map toolbar</h1>
+  <p>Local preview with live BOM tiles. No dashboard or release has been changed.</p>
+  <div class="settings">
+    <label>Map <select id="layer" aria-label="Weather layer"></select></label>
+    <button id="width">Use 320px cards</button>
+    <button id="check">Check layout</button>
+  </div>
+  <div class="comparison" id="comparison">
+    <section><h2>Without the colour-key button</h2><bom-radar-card id="before"></bom-radar-card><p class="caption">Same compact toolbar, with weather strip and colour-key button disabled.</p></section>
+    <section><h2>With the colour-key button</h2><bom-radar-card id="after"></bom-radar-card><p class="caption">Tap the colour strip or toolbar key for exact ranges. Both panels have a fixed header and scroll inside the card. If space is tight, playback hides until the panel closes or more space is available.</p></section>
+  </div>
+  <output id="checks" aria-live="polite"></output>
+  <section id="radar-example" hidden>
+    <h2>One colour table, two ways to read it</h2>
+    <p>Below are the exact BOM bands used to build the strip—not extra elements added to the card.</p>
+    <ul id="radar-bands" aria-label="Exact weather colour bands"></ul>
+    <p class="caption">Numerical colours blend smoothly; categories have distinct boundaries. The strip is not a numerical ruler.</p>
+  </section>
+</main>
+<script type="module">
+  import '/card.js';
+  const before = document.getElementById('before');
+  const after = document.getElementById('after');
+  const layer = document.getElementById('layer');
+  const requestedLayer = new URLSearchParams(location.search).get('layer');
+  // This explanatory data request belongs to the dev preview, not the card.
+  const legendExamples = await fetch('/legend-examples.json').then(response => {
+    if (!response.ok) throw new Error('Could not load the legend examples');
+    return response.json();
+  });
+  for (const [key, legend] of Object.entries(legendExamples)) {
+    const option = document.createElement('option');
+    option.value = key;
+    option.textContent = `${legend.title}${legend.kind === 'categorical' ? '' : ` · ${legend.unit}`}`;
+    layer.append(option);
+  }
+  layer.value = Object.hasOwn(legendExamples, requestedLayer) ? requestedLayer : 'air_temperature';
+  function update() {
+    for (const [card, enabled] of [[before, false], [after, true]]) {
+      card.setConfig({ type: 'custom:bom-radar-card', latitude: -33.86, longitude: 151.2,
+        layer: layer.value, zoom_level: 6, map_height: 300, frame_count: 4,
+        show_weather_legend: enabled, show_legend_button: enabled, show_lightning: false, show_layer_label: true });
+      card.hass = { config: { latitude: -33.86, longitude: 151.2 }, states: {} };
+    }
+    document.getElementById('checks').textContent = '';
+    const example = legendExamples[layer.value];
+    document.getElementById('radar-example').hidden = !example?.bands.length;
+    const bands = document.getElementById('radar-bands');
+    bands.replaceChildren();
+    if (example) {
+      for (const { label, rgba: [r, g, b, a] } of example.bands) {
+        const item = document.createElement('li');
+        const swatch = document.createElement('span');
+        swatch.className = 'swatch';
+        swatch.style.background = `rgba(${r},${g},${b},${a / 255})`;
+        swatch.setAttribute('aria-hidden', 'true');
+        item.append(swatch, `${label}${example.kind === 'categorical' ? '' : ` ${example.unit}`}`);
+        bands.append(item);
+      }
+    }
+  }
+  layer.addEventListener('change', update);
+  document.getElementById('width').addEventListener('click', (event) => {
+    const narrow = document.getElementById('comparison').classList.toggle('narrow');
+    event.target.textContent = narrow ? 'Use wider cards' : 'Use 320px cards';
+  });
+  const checkButton = document.getElementById('check');
+  // Keep the panel open while this development-only control measures it. This
+  // listener is installed before update() initializes the card's outside handler.
+  window.addEventListener('pointerdown', (event) => {
+    if (event.composedPath().includes(checkButton)) event.stopImmediatePropagation();
+  }, true);
+  checkButton.addEventListener('click', () => {
+    const root = after.shadowRoot;
+    const card = root.querySelector('ha-card').getBoundingClientRect();
+    const strip = root.querySelector('.legend-scale')?.getBoundingClientRect();
+    const controls = root.querySelector('.leaflet-top .leaflet-control')?.getBoundingClientRect();
+    const panel = root.querySelector('.bom-key-panel:not([hidden]), .bom-layer-panel.is-open');
+    const panelRect = panel?.getBoundingClientRect();
+    const playbackElement = root.querySelector('.controls');
+    const playbackStyle = playbackElement && getComputedStyle(playbackElement);
+    const playback = playbackElement && playbackStyle.visibility === 'visible' &&
+      playbackStyle.display !== 'none' && playbackElement.getClientRects().length
+      ? playbackElement.getBoundingClientRect() : null;
+    const viewport = window.visualViewport;
+    const viewportBounds = {
+      left: viewport?.offsetLeft ?? 0,
+      top: viewport?.offsetTop ?? 0,
+      right: (viewport?.offsetLeft ?? 0) + (viewport?.width ?? window.innerWidth),
+      bottom: (viewport?.offsetTop ?? 0) + (viewport?.height ?? window.innerHeight),
+    };
+    const inside = (outer, inner) => inner.left >= outer.left - 1 &&
+      inner.right <= outer.right + 1 && inner.top >= outer.top - 1 &&
+      inner.bottom <= outer.bottom + 1;
+    const overlaps = (a, b) => a.left < b.right && a.right > b.left &&
+      a.top < b.bottom && a.bottom > b.top;
+    document.getElementById('checks').textContent = JSON.stringify({
+      width: card.width, height: card.height, stripHeight: strip?.height,
+      horizontalOverflow: root.querySelector('.card-content').scrollWidth > card.width,
+      controlsClearStrip: !strip || !controls || controls.top >= strip.bottom,
+      openPanel: panel?.classList.contains('bom-key-panel') ? 'colour key' : panel ? 'layers' : null,
+      panelInsideCard: !panelRect || inside(card, panelRect),
+      panelInsideViewport: !panelRect || inside(viewportBounds, panelRect),
+      playbackVisible: Boolean(playback),
+      playbackClear: !panelRect || !playback || !overlaps(panelRect, playback),
+      loadedWeatherTiles: root.querySelectorAll('.leaflet-tile-loaded').length,
+    }, null, 2);
+  });
+  update();
+</script>
+</html>

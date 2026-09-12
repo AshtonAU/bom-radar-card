@@ -1,5 +1,6 @@
 import { nodeResolve } from '@rollup/plugin-node-resolve';
 import terser from '@rollup/plugin-terser';
+import { bundleUiFont, uiFontLicenseBanner } from './scripts/bundle-ui-font.mjs';
 
 const licenseBanner = `/*!
  * bom-radar-card - MIT License
@@ -43,9 +44,10 @@ export default {
   output: {
     file: 'dist/bom-radar-card.js',
     format: 'es',
-    banner: licenseBanner,
+    banner: async () => `${licenseBanner}\n${await uiFontLicenseBanner()}`,
   },
   plugins: [
+    bundleUiFont(),
     nodeResolve({ browser: true }),
     terser({
       format: {

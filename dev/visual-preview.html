@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>BOM radar card · appearance preview</title>
+<style>
+  :root { color-scheme:light; --primary-text-color:#202b38; --secondary-text-color:#5c6876; --card-background-color:#fff; --divider-color:#d4dbe3; --primary-color:#1976d2; --accent-color:#008da5; --page-background:#f2f4f7; }
+  :root[data-theme="dark"] { color-scheme:dark; --primary-text-color:#edf1f5; --secondary-text-color:#afb9c6; --card-background-color:#1b2028; --divider-color:#414b59; --primary-color:#64b5f6; --accent-color:#37becf; --page-background:#11151b; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--page-background); color:var(--primary-text-color); font:14px/1.5 'BOM Inter',system-ui,sans-serif; }
+  main { max-width:1200px; margin:auto; padding:28px; }
+  header { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:16px; margin-bottom:24px; }
+  h1 { margin:0; font-size:22px; letter-spacing:-.025em; font-weight:600; }
+  p { margin:4px 0 0; color:var(--secondary-text-color); font-size:13px; }
+  select { border:1px solid var(--divider-color); background:var(--card-background-color); color:var(--primary-text-color); border-radius:8px; min-height:40px; padding:8px 12px; font:inherit; }
+  select:focus-visible { outline:2px solid var(--primary-color); outline-offset:3px; }
+  .layout { display:grid; grid-template-columns:minmax(0,1.45fr) minmax(340px,1fr); align-items:start; gap:28px; }
+  .preview { position:sticky; top:24px; min-width:0; }
+  .settings { min-width:0; padding:20px; background:var(--card-background-color); border:1px solid var(--divider-color); border-radius:12px; }
+  h2 { margin:0 0 4px; font-size:18px; font-weight:600; letter-spacing:-.02em; }
+  .settings>p { margin-bottom:24px; }
+  ha-card { display:block; }
+  #configuration { display:block; margin-top:12px; color:var(--secondary-text-color); font-size:12px; }
+  @media(max-width:760px) { main { padding:16px; } .layout { grid-template-columns:minmax(0,1fr); gap:24px; } .preview { position:static; } .settings { padding:16px; } }
+</style>
+<main>
+  <header>
+    <div><h1>BOM radar card</h1><p>Local appearance preview · changes here are not saved to Home Assistant.</p></div>
+    <label>Appearance <select id="theme"><option value="light">Light</option><option value="dark">Dark</option></select></label>
+  </header>
+  <div class="layout">
+    <section class="preview">
+      <bom-radar-card id="preview-card"></bom-radar-card>
+      <output id="configuration" aria-live="polite">Choose a layer or adjust its settings.</output>
+    </section>
+    <section class="settings">
+      <h2>Card settings</h2><p>See each change in the preview.</p>
+      <bom-radar-card-editor id="preview-editor"></bom-radar-card-editor>
+    </section>
+  </div>
+</main>
+<script type="module">
+  import '/card.js';
+  const card = document.querySelector('#preview-card');
+  const editor = document.querySelector('#preview-editor');
+  const theme = document.querySelector('#theme');
+  const requestedTheme = new URLSearchParams(location.search).get('theme');
+  theme.value = requestedTheme === 'dark' ? 'dark' : 'light';
+  let config = { type:'custom:bom-radar-card', layer:'reflectivity', zoom_level:6, map_height:300,
+    frame_count:4, show_weather_legend:true, show_lightning:false, show_layer_label:true };
+  function applyTheme() {
+    document.documentElement.dataset.theme = theme.value;
+    const hass = { themes:{ darkMode:theme.value === 'dark' }, config:{ latitude:-33.86, longitude:151.2 },
+      states:{ 'sun.sun':{ state:'above_horizon' } } };
+    card.hass = hass;
+    editor.hass = hass;
+  }
+  theme.addEventListener('change', applyTheme);
+  editor.addEventListener('config-changed', event => {
+    config = event.detail.config;
+    card.setConfig(config);
+    editor.setConfig(config);
+    document.querySelector('#configuration').textContent = 'Preview updated. Your dashboard has not been changed.';
+  });
+  card.setConfig(config);
+  editor.setConfig(config);
+  applyTheme();
+</script>
+</html>

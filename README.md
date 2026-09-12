@@ -10,21 +10,22 @@ Native Australian Bureau of Meteorology radar and weather layers for Home Assist
 [![CI](https://github.com/AshtonAU/bom-radar-card/actions/workflows/ci.yml/badge.svg)](https://github.com/AshtonAU/bom-radar-card/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-**Current release: v1.11.1**
+**Current release: v1.12.0**
 
 </div>
 
 BOM Radar Card is a modern replacement for older Home Assistant radar cards that depended on the discontinued `api.weather.bom.gov.au` stack. It uses BOM's current public WMTS and MapServer services, with an interactive Leaflet map, animation, forecast layers, optional lightning, and a visual editor.
 
 > [!NOTE]
-> **v1.11.1 is a backward-compatible patch release.** It restores reliable home-marker stacking and adds provider-isolated CARTO raster-key support without changing existing BOM, Stadia Maps, or Esri authentication. See the [changelog](CHANGELOG.md) for details.
+> **v1.12.0 is a backward-compatible interface update.** It adds exact BOM colour keys, a responsive layer picker, dashboard-themed controls and settings, and an optional map-only idle view after 10 seconds. Existing YAML remains valid and auto-hide is off by default. See the [changelog](CHANGELOG.md) for details.
 
 ## At a glance
 
 - Native BOM weather tiles from `api.bom.gov.au`
 - 34 observed and forecast layers covering rain, wind, waves, temperature, humidity, UV, and significant weather
 - Pan, zoom, playback, timeline scrubbing, recentering, and five-minute refreshes
-- Built-in layer switcher and rain/reflectivity legend
+- Responsive layer switcher and exact colour keys for all 31 colour-bearing weather layers
+- Dashboard-themed controls and settings, with an optional map-only idle view
 - BOM-native automatic day/night basemap by default
 - Optional BOM reference overlays, CARTO, Stadia Maps, and Esri basemaps
 - Optional live lightning from the Home Assistant Blitzortung integration
@@ -101,6 +102,13 @@ show_legend: true
 
 Most options are available in Home Assistant's visual editor. YAML-only options are marked below.
 
+The editor starts with the weather layer and opacity settings. Map, playback,
+controls and appearance, available layers, lightning, and home marker settings
+are grouped into collapsible sections with sentence-case labels. Opacity fields
+show percentages: `70%` in the editor is still `radar_opacity: 0.7` in YAML.
+`chrome_opacity` is also stored as a fraction; existing configuration values do
+not need conversion.
+
 ### Map and data
 
 | Option | Type | Default | Description |
@@ -128,8 +136,9 @@ Most options are available in Home Assistant's visual editor. YAML-only options 
 | `frame_delay` | number | `500` | Delay between frames in milliseconds; minimum 100 ms. |
 | `restart_delay` | number | `1500` | Pause on the final frame in milliseconds; minimum 500 ms. |
 | `radar_opacity` | number | `0.7` | Weather overlay opacity from 0.1–1.0. |
-| `chrome_opacity` | number | `1.0` | Opacity of controls, badges, and panels from 0.2–1.0. |
-| `accent_color` | string | neutral | Optional `#RGB` or `#RRGGBB` color for UI highlights. |
+| `chrome_opacity` | number | `1.0` | Background opacity of compact controls and badges from 0.2–1.0. Open panels remain solid. |
+| `auto_hide_controls` | boolean | `false` | After 10 seconds of inactivity, fade the toolbar, playback, time, layer label and credits, leaving the map and any enabled top colour strip. Tap or move the pointer to reveal them. Provider attribution requirements still apply. |
+| `accent_color` | string | HA primary | Optional `#RGB` or `#RRGGBB` override for UI highlights. Omit to follow the Home Assistant theme's primary colour. |
 | `location_color` | string | HA accent | Optional `#RGB` or `#RRGGBB` color for the location marker. |
 | `show_marker` | boolean | `true` | Show the home marker. |
 | `marker_latitude` | number | HA latitude | Override the marker latitude without changing the map center. Falls back to the configured center, then Sydney, when HA has no location. |
@@ -139,7 +148,9 @@ Most options are available in Home Assistant's visual editor. YAML-only options 
 | `show_layer_switcher` | boolean | `true` | Show the in-card layer switcher. |
 | `show_playback` | boolean | `true` | Show playback and timeline controls. |
 | `show_legend` | boolean | `true` | Show the rain-rate/reflectivity legend when applicable. |
-| `show_layer_label` | boolean | `false` | Show the active layer name. |
+| `show_weather_legend` | boolean | `false` | Show the same thin top colour strip on shaded weather layers. Independent of the radar legend toggle. |
+| `show_legend_button` | boolean | `true` | Show a colour-key button for layers with colour bands. Opens exact swatches and ranges, independently of strip visibility. |
+| `show_layer_label` | boolean | `false` | Show the active layer name when it fits clear of controls and credits. |
 | `show_attribution` | boolean | `true` | User-toggleable map and data attribution. Disabling it does not waive provider attribution requirements. |
 | `square_style` | boolean | `false` | Use square corners for the card and controls. |
 | `dark_basemap` | boolean | `true` | Legacy light/dark fallback used when a fixed style is not configured. |
@@ -302,8 +313,8 @@ The visual editor and in-card switcher use these layer IDs. Observed layers init
 | `heatwave_severity` | Temperature | Heatwave severity |
 | `relative_humidity` | Humidity & UV | Relative humidity |
 | `dew_point` | Humidity & UV | Dew-point temperature |
-| `uv_index` | Humidity & UV | UV Index |
-| `uv_max_daily` | Humidity & UV | Daily maximum UV Index |
+| `uv_index` | Humidity & UV | UV index |
+| `uv_max_daily` | Humidity & UV | Daily maximum UV index |
 | `thunderstorms` | Significant weather | Thunderstorm overlay |
 | `snow` | Significant weather | Snow overlay |
 | `fog` | Significant weather | Fog overlay |
@@ -311,7 +322,75 @@ The visual editor and in-card switcher use these layer IDs. Observed layers init
 
 </details>
 
-The built-in qualitative legend applies to `rain_rate` and `reflectivity`. Other layers use BOM's rendered tile colours without an additional inline scale.
+The built-in qualitative legend applies to `rain_rate` and `reflectivity` and
+preserves the existing gradient.
+With `show_weather_legend: true`, the other 29 shaded layers use the same 6px top
+strip and shared renderer. Numerical layers use smooth gradients; categorical
+layers (heatwave severity, thunderstorms, snow, fog and frost) use distinct colour
+segments. Wind and swell direction layers use arrows, not a colour scale.
+The strip overlays the map without increasing `map_height` or replacing the
+optional layer-name badge. With the colour key enabled, tapping the strip opens
+the same exact bands as the toolbar's **Colour key** button.
+
+Map controls share one compact toolbar at the top right, with 44px targets on
+touch devices. On short cards, the controls form a horizontal row and the optional
+layer label moves below them. The colour key and layer picker open over the
+toolbar inside the card. Both use a fixed header and scrollable body, with room
+for playback underneath when height permits. On very short or partly visible
+cards, the open panel temporarily hides playback to keep its contents usable.
+Playback returns when the panel closes or more vertical space becomes available.
+The layer picker uses a grouped grid: two columns
+on typical narrow cards, three on wider cards, and one where space is very tight.
+Its header stays visible while the choices scroll, and its bounds follow the
+visible part of the card and screen. Selecting a layer closes the picker; reopening
+reveals the current selection without scrolling the dashboard. Only one panel
+opens at a time. Existing layer visibility settings still apply.
+On very compact cards, the optional layer label hides if it would overlap the
+toolbar, playback or credits, and returns when there is enough room. The active
+layer remains available through the layer picker.
+Card controls, open panels and the visual editor inherit the dashboard's theme
+colours and typography, including custom themes. Light/dark defaults provide
+fallbacks when Home Assistant theme variables are unavailable. Appearance follows
+the dashboard automatically; there is no separate card theme picker. Existing
+`accent_color` overrides still work, while the default follows Home Assistant's
+primary colour. The basemap's day/night style remains independent, and weather
+legend colours retain BOM's source values.
+
+Typography uses Home Assistant's `--ha-font-family-body`, then
+`--primary-font-family`. The card bundles Inter (Latin variable font, SIL Open
+Font License 1.1) as a fallback, followed by system fonts. No Google Fonts request,
+additional Home Assistant resource or typography setting is needed. The font's
+copyright and licence are included in the bundle; the card remains MIT.
+
+`chrome_opacity` changes the compact toolbar, playback and badge backgrounds;
+open layer and colour-key panels stay solid to keep text and swatches readable.
+
+Enable **Auto-hide controls** in the visual editor's **Controls and appearance**
+section, or set `auto_hide_controls: true`, for a map-only idle view after
+10 seconds of inactivity. The toolbar, playback, time, weather-layer label and
+map credits fade away; the map and any enabled thin top colour strip remain. The first tap
+reveals the hidden interface without activating a hidden control. Pointer
+movement also reveals it immediately. The colour strip still opens its key.
+Controls stay visible while a panel is open or an interface control has keyboard
+focus; reduced-motion preferences disable the fade. Auto-hide is off by default.
+Because this option also hides map credits while idle, provider attribution
+requirements still apply; leave it off when credits must remain continuously visible.
+
+The **Colour key** button in the toolbar opens the exact colour swatches
+and ranges for the displayed layer. It also works if the strip or layer selector
+is hidden. Close it with the panel's close button, Escape, or a map
+tap/pan/zoom. Direction-only layers have no colour-key button. Disable it with
+`show_legend_button: false` or the visual editor; this also disables opening the
+key from the strip. The panel is closed initially,
+scrolls inside short cards, and does not change `map_height`.
+
+Legend definitions are bundled, so they add no runtime API requests. Labels retain
+BOM's wording; exact bands and units remain in the shared data and accessible
+description. The strip is qualitative, not a numerical axis or an exact reading
+at the home marker.
+Changing `radar_opacity` or the basemap can affect the apparent tile colours.
+The [legend data contract](docs/legend-data.md) documents all 34 layers and the
+read-only upstream checker alongside the shared strip and panel behavior.
 
 ## Basemap providers
 
@@ -451,7 +530,7 @@ The card requests weather tiles from BOM's own mapping service rather than a thi
 - Confirm the resource is loaded as a **JavaScript module**.
 - Hard-refresh the browser or clear the Home Assistant frontend cache.
 - Remove old BOM radar resources that may register a conflicting custom element.
-- Open the browser console and confirm it reports `BOM-RADAR-CARD v1.11.1`.
+- Open the browser console and confirm it reports `BOM-RADAR-CARD v1.12.0`.
 
 ### The map changes width or framing after switching tabs
 
@@ -475,6 +554,12 @@ BOM's tile matrices cover Australia and nearby waters rather than the full world
 - [GitHub Issues](https://github.com/AshtonAU/bom-radar-card/issues): reproducible bugs and concrete feature requests
 - [CONTRIBUTING.md](CONTRIBUTING.md): development and contribution guidance
 - [SECURITY.md](SECURITY.md): private vulnerability reporting guidance
+
+For local visual QA, run `npm run preview:legends` and open the
+[appearance preview](http://127.0.0.1:8124/visual) to use the card and
+its settings editor together, with light/dark appearance controls. The root
+preview route compares colour strips and exact source bands. Both previews build
+in memory; changes there are not saved to Home Assistant or the release bundle.
 
 If the card saves you time and you want to support maintenance, you can use [GitHub Sponsors](https://github.com/sponsors/AshtonAU) or [Buy Me a Coffee](https://buymeacoffee.com/ashtonau).
 
