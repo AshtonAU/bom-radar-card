@@ -36,10 +36,10 @@ import { generateFallbackTimestamps } from './timestamps.js';
 import { getLegendConfig, renderLegendHtml, renderLegendBandsHtml } from './legend.js';
 import { loadUiFont } from './ui-font.js';
 import { getLayerPickerBounds } from './layer-picker-layout.js';
-import { UI_THEME_CSS, syncUiTheme, observeUiTheme } from './ui-theme.js';
+import { UI_THEME_CSS, getUiTheme, normalizeUiTheme, syncUiTheme, observeUiTheme } from './ui-theme.js';
 import { createAutoHideControls } from './auto-hide-controls.js';
 
-const CARD_VERSION = '1.12.0';
+const CARD_VERSION = '1.13.0';
 const DEFAULT_ACCENT_COLOR = '#00BCD4';
 const DEFAULT_UI_ACCENT_COLOR = '#F8FAFC';
 
@@ -540,6 +540,12 @@ ha-card {
   border-radius: var(--bom-card-radius, var(--ha-card-border-radius, var(--ha-border-radius-lg, 12px)));
   background: var(--ha-card-background, var(--card-background-color, var(--bom-surface)));
   box-shadow: var(--ha-card-box-shadow, none);
+}
+:host([data-ui-theme="light"]) ha-card, :host([data-ui-theme="dark"]) ha-card {
+  background: var(--bom-surface);
+  color: var(--bom-text);
+  border-color: var(--bom-border);
+  box-shadow: var(--bom-shadow);
 }
 .card-content {
   /* Resolve opacity here, beneath the per-card config on ha-card. */
@@ -1199,7 +1205,7 @@ class BomRadarCard extends HTMLElement {
 
   connectedCallback() {
     this._stopThemeObserver?.();
-    this._stopThemeObserver = observeUiTheme(this, () => this._hass);
+    this._stopThemeObserver = observeUiTheme(this, () => this._hass, () => this._config.ui_theme);
     this._initIfReady();
   }
 
@@ -1228,7 +1234,7 @@ class BomRadarCard extends HTMLElement {
 
   set hass(hass) {
     this._hass = hass;
-    syncUiTheme(this, hass);
+    syncUiTheme(this, hass, undefined, this._config.ui_theme);
     if (this._restartForAutoBasemapChange()) {
       return;
     }
@@ -1281,6 +1287,7 @@ class BomRadarCard extends HTMLElement {
       marker_longitude: parseOptionalFiniteNumber(config.marker_longitude),
       radar_opacity: clampNumber(config.radar_opacity, 0.7, 0.1, 1),
       chrome_opacity: clampNumber(config.chrome_opacity, 1, 0.2, 1),
+      ui_theme: normalizeUiTheme(config.ui_theme),
       accent_color: sanitizeAccentColor(config.accent_color),
       location_color: sanitizeAccentColor(config.location_color),
       allow_overzoom: allowOverzoom,
@@ -1291,6 +1298,7 @@ class BomRadarCard extends HTMLElement {
       lightning_pulse: config.lightning_pulse !== false,
       lightning_dot_size: clampNumber(config.lightning_dot_size, 5, 2, 12),
     };
+    syncUiTheme(this, this._hass, undefined, this._config.ui_theme);
     if (this._initialized || this._map) {
       this._restart();
       return;
@@ -2652,6 +2660,15 @@ class BomRadarCardEditor extends HTMLElement {
         <details class="section" data-section="display" ${this._openSections.has('display') ? 'open' : ''}>
           <summary><span><span class="section-title">Controls and appearance</span><span class="section-description">Buttons, colour strips and card styling</span></span></summary>
           <div class="section-content">
+          <div class="row">
+            <label for="ui_theme">Controls theme</label>
+            <select id="ui_theme" aria-describedby="ui-theme-help">
+              ${[['auto', 'Follow dashboard'], ['light', 'Light'], ['dark', 'Dark']].map(([value, label]) =>
+                `<option value="${value}" ${normalizeUiTheme(cfg.ui_theme) === value ? 'selected' : ''}>${label}</option>`
+              ).join('')}
+            </select>
+            <div class="help-text" id="ui-theme-help">Choose Light or Dark to use neutral colours for card controls and panels. Map style is set separately.</div>
+          </div>
           ${this._toggle('show_marker', 'Home marker', cfg.show_marker !== false)}
           ${this._toggle('show_zoom', 'Zoom controls', cfg.show_zoom !== false)}
           ${this._toggle('show_recenter', 'Re-centre button', cfg.show_recenter !== false)}
@@ -2675,7 +2692,7 @@ class BomRadarCardEditor extends HTMLElement {
             <div class="row">
               <label for="accent_color">Controls accent</label>
               <input type="color" id="accent_color" aria-describedby="accent-help" value="${escapeHtml(cfg.accent_color || DEFAULT_UI_ACCENT_COLOR)}">
-              <div class="help-text" id="accent-help">Leave custom colour off to follow your Home Assistant theme.</div>
+              <div class="help-text" id="accent-help">Leave custom colour off to use the selected controls theme.</div>
             </div>
           ` : ''}
           </div>
@@ -2753,7 +2770,7 @@ class BomRadarCardEditor extends HTMLElement {
 
     // Bind events
     const fields = [
-      'layer', 'basemap_provider', 'basemap_style', 'basemap_api_key',
+      'layer', 'basemap_provider', 'basemap_style', 'basemap_api_key', 'ui_theme',
       'zoom_level', 'map_height', 'center_latitude', 'center_longitude',
       'frame_delay', 'restart_delay', 'radar_opacity', 'chrome_opacity', 'frame_count',
       'marker_latitude', 'marker_longitude', 'accent_color', 'location_color',
@@ -2884,10 +2901,15 @@ class BomRadarCardEditor extends HTMLElement {
       }
     }
 
+    const uiTheme = normalizeUiTheme(get('ui_theme')?.value);
+    if (uiTheme === 'auto') delete config.ui_theme;
+    else config.ui_theme = uiTheme;
+
     const useCustomAccent = get('use_custom_accent_color');
     if (useCustomAccent?.checked) {
       const accentColor = sanitizeAccentColor(get('accent_color')?.value);
-      config.accent_color = accentColor || (this.getAttribute('data-theme') === 'dark' ? '#edf1f5' : '#26384b');
+      const darkControls = getUiTheme(this._hass, this.getAttribute('data-theme') === 'dark', uiTheme) === 'dark';
+      config.accent_color = accentColor || (darkControls ? '#edf1f5' : '#26384b');
     } else {
       delete config.accent_color;
     }

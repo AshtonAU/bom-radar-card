@@ -1,6 +1,6 @@
 {
   "name": "bom-radar-card",
-  "version": "1.12.0",
+  "version": "1.13.0",
   "private": true,
   "description": "Australian Bureau of Meteorology rain radar card for Home Assistant using native BOM WMTS tiles",
   "main": "dist/bom-radar-card.js",

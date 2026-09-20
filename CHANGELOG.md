@@ -1,5 +1,14 @@
 # Changelog
 
+## v1.13.0 - 2026-09-21
+
+### Added
+
+- Add a Controls theme setting (`ui_theme: auto | light | dark`). Keep dashboard
+  colours by default, or select a neutral light/dark palette for the card and its
+  controls and panels. Custom accent colours still apply; map styles, marker
+  colours and settings-editor appearance remain independent. Addresses #24.
+
 ## v1.12.0 - 2026-09-12
 
 ### Changed

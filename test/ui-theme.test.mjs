@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { getUiTheme, observeUiTheme, syncUiTheme } from '../src/ui-theme.js';
+import { getUiTheme, normalizeUiTheme, observeUiTheme, syncUiTheme } from '../src/ui-theme.js';
 
 function createElement() {
   const attributes = new Map();
@@ -37,20 +37,56 @@ test('missing or nonboolean Home Assistant preferences follow the system', () =>
   assert.equal(getUiTheme(), 'light');
 });
 
-test('theme synchronization only writes the host attribute when its value changes', () => {
+test('explicit card themes override Home Assistant and system preferences', () => {
+  for (const preference of ['light', 'dark']) {
+    assert.equal(normalizeUiTheme(preference), preference);
+    for (const darkMode of [false, true, undefined]) {
+      for (const systemDark of [false, true]) {
+        assert.equal(getUiTheme({ themes: { darkMode } }, systemDark, preference), preference);
+      }
+    }
+  }
+});
+
+test('unknown card theme values safely retain dashboard inheritance', () => {
+  for (const preference of ['auto', undefined, null, '', 'Dark', 'invalid', '__proto__', true, 0, {}, []]) {
+    assert.equal(normalizeUiTheme(preference), 'auto');
+    assert.equal(getUiTheme({ themes: { darkMode: false } }, true, preference), 'light');
+    assert.equal(getUiTheme({ themes: { darkMode: true } }, false, preference), 'dark');
+    assert.equal(getUiTheme(undefined, true, preference), 'dark');
+  }
+});
+
+test('theme synchronization only writes host attributes when their values change', () => {
   const element = createElement();
   syncUiTheme(element, undefined, false);
   syncUiTheme(element, undefined, false);
   syncUiTheme(element, { themes: { darkMode: false } }, true);
-  assert.deepEqual(element.writes, [['data-theme', 'light']]);
+  assert.deepEqual(element.writes.toSorted(), [['data-theme', 'light'], ['data-ui-theme', 'auto']]);
 
   syncUiTheme(element, { themes: { darkMode: true } }, false);
   syncUiTheme(element, undefined, true);
   assert.equal(element.getAttribute('data-theme'), 'dark');
-  assert.deepEqual(element.writes, [['data-theme', 'light'], ['data-theme', 'dark']]);
+  assert.equal(element.writes.length, 3);
+  assert.deepEqual(element.writes.at(-1), ['data-theme', 'dark']);
+
+  syncUiTheme(element, undefined, true, 'dark');
+  syncUiTheme(element, undefined, true, 'dark');
+  assert.equal(element.writes.length, 4);
+  assert.deepEqual(element.writes.at(-1), ['data-ui-theme', 'dark']);
+
+  syncUiTheme(element, undefined, true, 'light');
+  assert.equal(element.getAttribute('data-theme'), 'light');
+  assert.equal(element.getAttribute('data-ui-theme'), 'light');
+  assert.equal(element.writes.length, 6);
+
+  syncUiTheme(element, { themes: { darkMode: false } }, true, 'invalid');
+  assert.equal(element.getAttribute('data-theme'), 'light');
+  assert.equal(element.getAttribute('data-ui-theme'), 'auto');
+  assert.equal(element.writes.length, 7);
 });
 
-test('system theme observation respects current Home Assistant preferences and cleans up its listener', t => {
+test('system theme observation reads current Home Assistant and card preferences and cleans up its listener', t => {
   const previousWindow = Object.getOwnPropertyDescriptor(globalThis, 'window');
   t.after(() => {
     if (previousWindow) Object.defineProperty(globalThis, 'window', previousWindow);
@@ -88,8 +124,10 @@ test('system theme observation respects current Home Assistant preferences and c
 
   const element = createElement();
   let hass;
-  const stop = observeUiTheme(element, () => hass);
+  let preference = 'auto';
+  const stop = observeUiTheme(element, () => hass, () => preference);
   assert.equal(element.getAttribute('data-theme'), 'light');
+  assert.equal(element.getAttribute('data-ui-theme'), 'auto');
   assert.equal(added.length, 1);
   assert.equal(added[0][0], 'change');
 
@@ -105,10 +143,23 @@ test('system theme observation respects current Home Assistant preferences and c
   media.change(false);
   assert.equal(element.getAttribute('data-theme'), 'dark');
 
+  preference = 'light';
+  media.change(true);
+  assert.equal(element.getAttribute('data-theme'), 'light');
+  assert.equal(element.getAttribute('data-ui-theme'), 'light');
+
+  preference = 'dark';
+  hass = { themes: { darkMode: false } };
+  media.change(false);
+  assert.equal(element.getAttribute('data-theme'), 'dark');
+  assert.equal(element.getAttribute('data-ui-theme'), 'dark');
+
+  preference = 'invalid';
   hass = { themes: { darkMode: 'auto' } };
   media.change(true);
   media.change(false);
   assert.equal(element.getAttribute('data-theme'), 'light');
+  assert.equal(element.getAttribute('data-ui-theme'), 'auto');
 
   stop();
   assert.deepEqual(removed, added, 'cleanup removes the exact registered event and callback');

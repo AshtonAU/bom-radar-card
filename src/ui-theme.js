@@ -1,17 +1,26 @@
-// UI surfaces follow the dashboard. Basemap day/night selection is independent.
-export function getUiTheme(hass, systemDark = false) {
+// UI surfaces follow the dashboard unless a built-in palette is selected.
+// Basemap day/night selection is independent.
+export function normalizeUiTheme(value) {
+  return value === 'light' || value === 'dark' ? value : 'auto';
+}
+
+export function getUiTheme(hass, systemDark = false, preference = 'auto') {
+  const selected = normalizeUiTheme(preference);
+  if (selected !== 'auto') return selected;
   const dark = typeof hass?.themes?.darkMode === 'boolean' ? hass.themes.darkMode : systemDark;
   return dark ? 'dark' : 'light';
 }
 
-export function syncUiTheme(element, hass, systemDark = window.matchMedia?.('(prefers-color-scheme: dark)').matches) {
-  const theme = getUiTheme(hass, systemDark);
+export function syncUiTheme(element, hass, systemDark = window.matchMedia?.('(prefers-color-scheme: dark)').matches, preference = 'auto') {
+  const selected = normalizeUiTheme(preference);
+  const theme = getUiTheme(hass, systemDark, selected);
+  if (element.getAttribute('data-ui-theme') !== selected) element.setAttribute('data-ui-theme', selected);
   if (element.getAttribute('data-theme') !== theme) element.setAttribute('data-theme', theme);
 }
 
-export function observeUiTheme(element, getHass) {
+export function observeUiTheme(element, getHass, getPreference = () => 'auto') {
   const media = window.matchMedia?.('(prefers-color-scheme: dark)');
-  const update = () => syncUiTheme(element, getHass(), media?.matches);
+  const update = () => syncUiTheme(element, getHass(), media?.matches, getPreference());
   media?.addEventListener?.('change', update);
   update();
   return () => media?.removeEventListener?.('change', update);
@@ -58,5 +67,17 @@ export const UI_THEME_CSS = `
   --bom-fallback-scrollbar: #778698;
   --bom-fallback-error: #ffaca5;
   --bom-fallback-shadow: 0 3px 14px rgb(0 0 0 / 0.28);
+}
+:host([data-ui-theme="light"]), :host([data-ui-theme="dark"]) {
+  --bom-surface: var(--bom-fallback-surface);
+  --bom-text: var(--bom-fallback-text);
+  --bom-muted: var(--bom-fallback-muted);
+  --bom-border: var(--bom-fallback-border);
+  --bom-divider: var(--bom-fallback-divider);
+  --bom-default-accent: var(--bom-fallback-accent);
+  --bom-track: var(--bom-fallback-track);
+  --bom-scrollbar: var(--bom-fallback-scrollbar);
+  --bom-error: var(--bom-fallback-error);
+  --bom-shadow: var(--bom-fallback-shadow);
 }
 `;

@@ -6,6 +6,7 @@
 <style>
   :root { color-scheme:light; --primary-text-color:#202b38; --secondary-text-color:#5c6876; --card-background-color:#fff; --divider-color:#d4dbe3; --primary-color:#1976d2; --accent-color:#008da5; --page-background:#f2f4f7; }
   :root[data-theme="dark"] { color-scheme:dark; --primary-text-color:#edf1f5; --secondary-text-color:#afb9c6; --card-background-color:#1b2028; --divider-color:#414b59; --primary-color:#64b5f6; --accent-color:#37becf; --page-background:#11151b; }
+  :root[data-theme="blue"] { color-scheme:dark; --primary-text-color:#fff; --secondary-text-color:#d3e5f5; --card-background-color:#235b8e; --ha-card-background:#235b8e; --divider-color:#5488b6; --ha-card-border-color:#5488b6; --primary-color:#46caff; --accent-color:#46caff; --slider-track-color:#72b2e4; --page-background:#112a40; }
   * { box-sizing:border-box; }
   body { margin:0; background:var(--page-background); color:var(--primary-text-color); font:14px/1.5 'BOM Inter',system-ui,sans-serif; }
   main { max-width:1200px; margin:auto; padding:28px; }
@@ -26,7 +27,7 @@
 <main>
   <header>
     <div><h1>BOM radar card</h1><p>Local appearance preview · changes here are not saved to Home Assistant.</p></div>
-    <label>Appearance <select id="theme"><option value="light">Light</option><option value="dark">Dark</option></select></label>
+    <label>Dashboard theme <select id="theme"><option value="light">Light</option><option value="dark">Dark</option><option value="blue">Custom blue</option></select></label>
   </header>
   <div class="layout">
     <section class="preview">
@@ -45,12 +46,12 @@
   const editor = document.querySelector('#preview-editor');
   const theme = document.querySelector('#theme');
   const requestedTheme = new URLSearchParams(location.search).get('theme');
-  theme.value = requestedTheme === 'dark' ? 'dark' : 'light';
+  theme.value = ['dark', 'blue'].includes(requestedTheme) ? requestedTheme : 'light';
   let config = { type:'custom:bom-radar-card', layer:'reflectivity', zoom_level:6, map_height:300,
     frame_count:4, show_weather_legend:true, show_lightning:false, show_layer_label:true };
   function applyTheme() {
     document.documentElement.dataset.theme = theme.value;
-    const hass = { themes:{ darkMode:theme.value === 'dark' }, config:{ latitude:-33.86, longitude:151.2 },
+    const hass = { themes:{ darkMode:theme.value !== 'light' }, config:{ latitude:-33.86, longitude:151.2 },
       states:{ 'sun.sun':{ state:'above_horizon' } } };
     card.hass = hass;
     editor.hass = hass;

@@ -10,14 +10,14 @@ Native Australian Bureau of Meteorology radar and weather layers for Home Assist
 [![CI](https://github.com/AshtonAU/bom-radar-card/actions/workflows/ci.yml/badge.svg)](https://github.com/AshtonAU/bom-radar-card/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-**Current release: v1.12.0**
+**Current release: v1.13.0**
 
 </div>
 
 BOM Radar Card is a modern replacement for older Home Assistant radar cards that depended on the discontinued `api.weather.bom.gov.au` stack. It uses BOM's current public WMTS and MapServer services, with an interactive Leaflet map, animation, forecast layers, optional lightning, and a visual editor.
 
 > [!NOTE]
-> **v1.12.0 is a backward-compatible interface update.** It adds exact BOM colour keys, a responsive layer picker, dashboard-themed controls and settings, and an optional map-only idle view after 10 seconds. Existing YAML remains valid and auto-hide is off by default. See the [changelog](CHANGELOG.md) for details.
+> **v1.13.0 adds an optional controls theme.** Keep dashboard colours, or choose neutral Light or Dark controls in the visual editor. Existing YAML and default appearance remain unchanged. See the [changelog](CHANGELOG.md) for details.
 
 ## At a glance
 
@@ -137,8 +137,9 @@ not need conversion.
 | `restart_delay` | number | `1500` | Pause on the final frame in milliseconds; minimum 500 ms. |
 | `radar_opacity` | number | `0.7` | Weather overlay opacity from 0.1–1.0. |
 | `chrome_opacity` | number | `1.0` | Background opacity of compact controls and badges from 0.2–1.0. Open panels remain solid. |
+| `ui_theme` | string | `auto` | Controls theme: `auto` follows the dashboard; `light` or `dark` uses the card's neutral palette instead of dashboard colours. Independent of map style. |
 | `auto_hide_controls` | boolean | `false` | After 10 seconds of inactivity, fade the toolbar, playback, time, layer label and credits, leaving the map and any enabled top colour strip. Tap or move the pointer to reveal them. Provider attribution requirements still apply. |
-| `accent_color` | string | HA primary | Optional `#RGB` or `#RRGGBB` override for UI highlights. Omit to follow the Home Assistant theme's primary colour. |
+| `accent_color` | string | Controls theme | Optional `#RGB` or `#RRGGBB` override for UI highlights. Omit to use HA's primary colour in `auto`, or the neutral accent in `light`/`dark`. |
 | `location_color` | string | HA accent | Optional `#RGB` or `#RRGGBB` color for the location marker. |
 | `show_marker` | boolean | `true` | Show the home marker. |
 | `marker_latitude` | number | HA latitude | Override the marker latitude without changing the map center. Falls back to the configured center, then Sydney, when HA has no location. |
@@ -348,13 +349,24 @@ opens at a time. Existing layer visibility settings still apply.
 On very compact cards, the optional layer label hides if it would overlap the
 toolbar, playback or credits, and returns when there is enough room. The active
 layer remains available through the layer picker.
-Card controls, open panels and the visual editor inherit the dashboard's theme
-colours and typography, including custom themes. Light/dark defaults provide
-fallbacks when Home Assistant theme variables are unavailable. Appearance follows
-the dashboard automatically; there is no separate card theme picker. Existing
-`accent_color` overrides still work, while the default follows Home Assistant's
-primary colour. The basemap's day/night style remains independent, and weather
-legend colours retain BOM's source values.
+Card controls and open panels inherit the dashboard's theme colours by default
+(`ui_theme: auto`), including custom themes. To override dashboard colours, choose
+**Controls theme → Light or Dark** under **Controls and appearance**, or set:
+
+```yaml
+ui_theme: dark
+```
+
+`light` and `dark` use the card's built-in neutral backgrounds, text and accents,
+even when the dashboard theme or its light/dark mode changes. Existing
+`accent_color` overrides still work in every mode. Choose **Follow dashboard**
+or remove `ui_theme` to restore the default behaviour. Unknown values fall back
+to `auto`.
+
+The settings editor and typography continue to follow Home Assistant. The
+basemap's day/night style and marker colour remain independent, and weather
+legend colours retain BOM's source values. Light/dark defaults provide fallbacks
+when Home Assistant theme variables are unavailable.
 
 Typography uses Home Assistant's `--ha-font-family-body`, then
 `--primary-font-family`. The card bundles Inter (Latin variable font, SIL Open
@@ -530,7 +542,7 @@ The card requests weather tiles from BOM's own mapping service rather than a thi
 - Confirm the resource is loaded as a **JavaScript module**.
 - Hard-refresh the browser or clear the Home Assistant frontend cache.
 - Remove old BOM radar resources that may register a conflicting custom element.
-- Open the browser console and confirm it reports `BOM-RADAR-CARD v1.12.0`.
+- Open the browser console and confirm it reports `BOM-RADAR-CARD v1.13.0`.
 
 ### The map changes width or framing after switching tabs
 

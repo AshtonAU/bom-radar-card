@@ -2651,6 +2651,7 @@ test('dashboard theme changes preserve the map, playback and open colour key ind
   key.button.click();
   assert.equal(key.panel.hidden, false);
   assert.equal(card.getAttribute('data-theme'), 'light');
+  assert.equal(card.getAttribute('data-ui-theme'), 'auto');
 
   card.hass = { ...hass, themes: { darkMode: true } };
   assert.equal(card.getAttribute('data-theme'), 'dark');
@@ -2667,6 +2668,82 @@ test('dashboard theme changes preserve the map, playback and open colour key ind
   setConnected(card, false);
 });
 
+test('card configuration updates the controls theme before initialization and falls back safely for unknown values', () => {
+  const harness = createHarness();
+  const card = new harness.Card();
+  card.setConfig(issueConfig({ ui_theme: 'dark' }));
+  assert.equal(card.getAttribute('data-theme'), 'dark');
+  assert.equal(card.getAttribute('data-ui-theme'), 'dark');
+
+  card.hass = { ...issueHass(), themes: { darkMode: false } };
+  assert.equal(card.getAttribute('data-theme'), 'dark');
+  card.setConfig(issueConfig({ ui_theme: 'light' }));
+  assert.equal(card.getAttribute('data-theme'), 'light');
+  assert.equal(card.getAttribute('data-ui-theme'), 'light');
+  card.hass = { ...issueHass(), themes: { darkMode: true } };
+  assert.equal(card.getAttribute('data-theme'), 'light');
+
+  for (const ui_theme of ['invalid', undefined, false, {}]) {
+    card.setConfig(issueConfig({ ui_theme }));
+    assert.equal(card._config.ui_theme, 'auto');
+    assert.equal(card.getAttribute('data-ui-theme'), 'auto');
+    assert.equal(card.getAttribute('data-theme'), 'dark');
+  }
+  assert.equal(harness.leafletState.maps.length, 0);
+});
+
+test('fixed controls themes survive connection and dashboard changes without replacing map or playback state', async () => {
+  for (const ui_theme of ['light', 'dark']) {
+    const harness = createHarness();
+    const hass = { ...issueHass({ 'sun.sun': { state: 'above_horizon' } }), themes: { darkMode: ui_theme === 'light' } };
+    const card = await initializeCard(harness, issueConfig({ ui_theme, basemap_style: 'auto' }), hass);
+    const map = card._map;
+    const frames = timeline(card);
+    const key = card._legendControl;
+    const basemapStyle = card._resolvedBasemapStyle;
+    card.shadowRoot.getElementById('play-btn').click();
+    key.button.click();
+    assert.equal(card._playing, false);
+    assert.equal(key.panel.hidden, false);
+    assert.equal(card.getAttribute('data-theme'), ui_theme);
+    assert.equal(card.getAttribute('data-ui-theme'), ui_theme);
+
+    for (const darkMode of [false, true]) {
+      card.hass = { ...hass, themes: { darkMode } };
+      assert.equal(card.getAttribute('data-theme'), ui_theme);
+      assert.equal(card.getAttribute('data-ui-theme'), ui_theme);
+      assert.equal(card._map, map);
+      assert.equal(timeline(card), frames);
+      assert.equal(card._legendControl, key);
+      assert.equal(key.panel.hidden, false);
+      assert.equal(card._playing, false);
+      assert.equal(card._resolvedBasemapStyle, basemapStyle);
+      assert.equal(harness.leafletState.maps.length, 1);
+    }
+    setConnected(card, false);
+  }
+});
+
+test('changing an initialized card controls theme applies each palette and restores dashboard inheritance', async () => {
+  const harness = createHarness();
+  const hass = { ...issueHass(), themes: { darkMode: true } };
+  const config = issueConfig({ accent_color: '#123456', location_color: '#abcdef' });
+  const card = await initializeCard(harness, config, hass);
+
+  for (const ui_theme of ['light', 'dark', undefined]) {
+    card.setConfig({ ...config, ui_theme });
+    await flushUntil(() => card._committedRadarLayerKey === 'reflectivity');
+    assert.equal(card.getAttribute('data-ui-theme'), ui_theme ?? 'auto');
+    assert.equal(card.getAttribute('data-theme'), ui_theme ?? 'dark');
+    assert.equal(card._config.accent_color, '#123456');
+    assert.equal(card._config.location_color, '#abcdef');
+    assert.equal(card._config.basemap_style, config.basemap_style);
+  }
+  card.hass = { ...hass, themes: { darkMode: false } };
+  assert.equal(card.getAttribute('data-theme'), 'light');
+  setConnected(card, false);
+});
+
 test('editor theme changes retain its controls and unsaved field value', () => {
   const harness = createHarness();
   const editor = new harness.Editor();
@@ -2678,6 +2755,31 @@ test('editor theme changes retain its controls and unsaved field value', () => {
   assert.equal(editor.getAttribute('data-theme'), 'dark');
   assert.equal(editor.shadowRoot.getElementById('map_height'), height);
   assert.equal(height.value, '420');
+});
+
+test('editor round-trips controls themes independently of its appearance, accents and basemap', () => {
+  const harness = createHarness();
+  const editor = new harness.Editor();
+  editor.hass = { ...issueHass(), themes: { darkMode: false } };
+  editor.setConfig(issueConfig({ accent_color: '#123456', location_color: '#abcdef', ui_theme: 'invalid' }));
+  let config;
+  editor.addEventListener('config-changed', event => { config = event.detail.config; });
+  assert.equal(editor.shadowRoot.getElementById('ui_theme').value, 'auto');
+
+  for (const preference of ['dark', 'light', 'auto']) {
+    const select = editor.shadowRoot.getElementById('ui_theme');
+    select.value = preference;
+    select.dispatchEvent({ type: 'change', target: select });
+    assert.equal(config.ui_theme, preference === 'auto' ? undefined : preference);
+    assert.equal(Object.hasOwn(config, 'ui_theme'), preference !== 'auto');
+    assert.equal(config.accent_color, '#123456');
+    assert.equal(config.location_color, '#abcdef');
+    assert.equal(config.basemap_style, 'dark');
+    editor.setConfig(config);
+    assert.equal(editor.shadowRoot.getElementById('ui_theme').value, preference);
+    assert.equal(editor.getAttribute('data-theme'), 'light');
+    assert.equal(editor.getAttribute('data-ui-theme'), 'auto');
+  }
 });
 
 test('editor opacity percentages round-trip as fractional configuration, including defaults and clearing', () => {
@@ -2709,10 +2811,15 @@ test('editor opacity percentages round-trip as fractional configuration, includi
 
 test('new custom accents start with a readable theme neutral and preserve an existing colour', () => {
   const harness = createHarness();
-  for (const [darkMode, expected] of [[false, '#26384b'], [true, '#edf1f5']]) {
+  for (const [darkMode, ui_theme, expected] of [
+    [false, undefined, '#26384b'],
+    [true, undefined, '#edf1f5'],
+    [false, 'dark', '#edf1f5'],
+    [true, 'light', '#26384b'],
+  ]) {
     const editor = new harness.Editor();
     editor.hass = { ...issueHass(), themes: { darkMode } };
-    editor.setConfig(issueConfig());
+    editor.setConfig(issueConfig({ ui_theme }));
     let config;
     editor.addEventListener('config-changed', event => { config = event.detail.config; });
     const toggle = editor.shadowRoot.getElementById('use_custom_accent_color');
