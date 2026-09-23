@@ -178,7 +178,7 @@ const BASEMAP_PROVIDER_STYLES = {
       labelsUrl: null,
       attribution: STADIA_STAMEN_ATTRIBUTION,
       background: '#ffffff',
-    }
+    },
   },
   esri: {
     imagery: {

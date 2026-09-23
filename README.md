@@ -410,10 +410,21 @@ read-only upstream checker alongside the shared strip and panel behavior.
 | --- | --- | --- |
 | `bom` | Default, Dark, Auto | Not required |
 | `carto` | Voyager Light, Dark Matter, Auto | Free key required for watermark-free raster tiles |
-| `stadia` | Alidade Light/Dark, Outdoors, OSM Bright, Terrain, Satellite | Domain auth or API key required |
+| `stadia` | Alidade Light/Dark, Outdoors, OSM Bright, Terrain, Satellite, Stamen Toner | Domain auth or API key required |
 | `esri` | World Imagery, World Topographic | May be required |
 
 Set `basemap_provider: carto` to retain the card's older CARTO appearance. CARTO now authenticates its legacy raster tiles with a free key and is retiring those raster endpoints in favour of vector basemaps. BOM remains the durable no-key default. Provider access terms can change; if a third-party basemap rejects tile requests, configure that provider's authentication rather than changing BOM radar settings.
+
+For the high-contrast black-and-white Stamen Toner map, choose **Stadia Maps →
+Stamen Toner** in the card's map settings, or use:
+
+```yaml
+basemap_provider: stadia
+basemap_style: stamen_toner
+```
+
+The same Stadia authentication requirements below apply to Toner. It changes
+only the basemap; weather-layer colours and the controls theme stay independent.
 
 ### Getting basemap provider keys
 
