@@ -1716,6 +1716,45 @@ test('keeps basemap_api_key backward compatible for Stadia Maps and Esri without
   }
 });
 
+test('Stamen Toner initializes with Stadia authentication and attribution without changing the weather layer', async () => {
+  for (const apiKey of ['', '  toner ?&/  ']) {
+    const harness = createHarness();
+    const card = await initializeCard(harness, issueConfig({
+      basemap_provider: 'stadia',
+      basemap_style: 'stamen_toner',
+      basemap_api_key: apiKey,
+      carto_api_key: 'carto-only-key',
+    }));
+    const calls = harness.leafletState.tileLayerCalls.filter(({ url }) => url.includes('stadiamaps.com'));
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].url, 'https://tiles.stadiamaps.com/tiles/stamen_toner/{z}/{x}/{y}{r}.png' +
+      (apiKey ? '?api_key=toner%20%3F%26%2F' : ''));
+    for (const provider of ['Stadia Maps', 'Stamen Design', 'OpenMapTiles', 'OpenStreetMap', 'BOM']) {
+      assert.ok(calls[0].options.attribution.includes(provider));
+    }
+    assert.equal(card._config.basemap_style, 'stamen_toner');
+    assert.equal(card._committedRadarLayerKey, 'reflectivity');
+    setConnected(card, false);
+  }
+});
+
+test('editor offers Stamen Toner and preserves its selection and Stadia key across a save', () => {
+  const harness = createHarness();
+  const editor = new harness.Editor();
+  editor.hass = issueHass();
+  editor.setConfig(issueConfig({ basemap_provider: 'stadia', basemap_style: 'alidade_light', basemap_api_key: 'test-key' }));
+  let saved;
+  editor.addEventListener('config-changed', event => { saved = event.detail.config; });
+  const styles = editor.shadowRoot.getElementById('basemap_style');
+  assert.match(editor.shadowRoot.innerHTML, /value="stamen_toner"[^>]*>Stamen Toner<\/option>/);
+  styles.value = 'stamen_toner';
+  styles.dispatchEvent({ type: 'change', target: styles });
+  assert.equal(saved.basemap_style, 'stamen_toner');
+  assert.equal(saved.basemap_api_key, 'test-key');
+  editor.setConfig(saved);
+  assert.equal(editor.shadowRoot.getElementById('basemap_style').value, 'stamen_toner');
+});
+
 test('uses linked CARTO and OpenStreetMap attribution while preserving the user attribution toggle', async () => {
   for (const showAttribution of [undefined, true, false]) {
     const harness = createHarness();

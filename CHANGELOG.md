@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Add Stamen Toner under Stadia Maps in the map-style settings: a high-contrast
+  black-and-white basemap suited to e-ink displays. Thanks to @jonathon-m in #25.
+
 ## v1.13.0 - 2026-09-21
 
 ### Added

@@ -172,6 +172,13 @@ const BASEMAP_PROVIDER_STYLES = {
       attribution: STADIA_SATELLITE_ATTRIBUTION,
       background: '#0d1117',
     },
+    stamen_toner: {
+      name: 'Stamen Toner',
+      baseUrl: 'https://tiles.stadiamaps.com/tiles/stamen_toner/{z}/{x}/{y}{r}.png',
+      labelsUrl: null,
+      attribution: STADIA_STAMEN_ATTRIBUTION,
+      background: '#ffffff',
+    },
   },
   esri: {
     imagery: {
