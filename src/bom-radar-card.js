@@ -39,7 +39,7 @@ import { getLayerPickerBounds } from './layer-picker-layout.js';
 import { UI_THEME_CSS, getUiTheme, normalizeUiTheme, syncUiTheme, observeUiTheme } from './ui-theme.js';
 import { createAutoHideControls } from './auto-hide-controls.js';
 
-const CARD_VERSION = '1.13.0';
+const CARD_VERSION = '1.14.0';
 const DEFAULT_ACCENT_COLOR = '#00BCD4';
 const DEFAULT_UI_ACCENT_COLOR = '#F8FAFC';
 
@@ -144,6 +144,13 @@ const BASEMAP_PROVIDER_STYLES = {
       attribution: STADIA_ATTRIBUTION,
       background: '#f2f3f0',
     },
+    alidade_bright: {
+      name: 'Alidade Bright',
+      baseUrl: 'https://tiles.stadiamaps.com/tiles/alidade_bright/{z}/{x}/{y}{r}.png',
+      labelsUrl: null,
+      attribution: STADIA_ATTRIBUTION,
+      background: '#f2efe9',
+    },
     outdoors: {
       name: 'Outdoors',
       baseUrl: 'https://tiles.stadiamaps.com/tiles/outdoors/{z}/{x}/{y}{r}.png',
@@ -175,6 +182,13 @@ const BASEMAP_PROVIDER_STYLES = {
     stamen_toner: {
       name: 'Stamen Toner',
       baseUrl: 'https://tiles.stadiamaps.com/tiles/stamen_toner/{z}/{x}/{y}{r}.png',
+      labelsUrl: null,
+      attribution: STADIA_STAMEN_ATTRIBUTION,
+      background: '#ffffff',
+    },
+    stamen_toner_lite: {
+      name: 'Stamen Toner Lite',
+      baseUrl: 'https://tiles.stadiamaps.com/tiles/stamen_toner_lite/{z}/{x}/{y}{r}.png',
       labelsUrl: null,
       attribution: STADIA_STAMEN_ATTRIBUTION,
       background: '#ffffff',
@@ -1273,6 +1287,7 @@ class BomRadarCard extends HTMLElement {
       show_zoom: config.show_zoom !== false,
       auto_hide_controls: config.auto_hide_controls === true,
       show_recenter: config.show_recenter !== false,
+      lock_map: config.lock_map === true,
       show_layer_switcher: config.show_layer_switcher !== false,
       show_playback: config.show_playback !== false,
       show_legend: config.show_legend !== false,
@@ -1436,6 +1451,10 @@ class BomRadarCard extends HTMLElement {
       center: [lat, lon],
       zoom: this._config.zoom_level,
       zoomControl: false,
+      ...(this._config.lock_map ? {
+        dragging: false, touchZoom: false, scrollWheelZoom: false,
+        doubleClickZoom: false, boxZoom: false, keyboard: false, tapHold: false,
+      } : {}),
       attributionControl: this._config.show_attribution,
       maxBounds: [[-55, 95], [5, 175]],
       minZoom: MIN_MAP_ZOOM,
@@ -1622,6 +1641,7 @@ class BomRadarCard extends HTMLElement {
     this._autoHideControls = createAutoHideControls({
       content,
       windowTarget: window,
+      allowPageScroll: this._config.lock_map,
       getActiveElement: () => this.shadowRoot.activeElement,
       // Pointer taps leave DOM focus behind too. Only keyboard-visible focus
       // should prevent idle hiding once the pointer interaction has finished.
@@ -1700,14 +1720,15 @@ class BomRadarCard extends HTMLElement {
       const button = L.DomUtil.create('button', 'bom-recenter-button', container);
       button.type = 'button';
       button.innerHTML = ICON_RECENTER;
-      button.title = 'Recenter to home location';
-      button.setAttribute('aria-label', 'Recenter to home location');
+      button.title = this._config.lock_map ? 'Recenter to starting location' : 'Recenter to home location';
+      button.setAttribute('aria-label', button.title);
 
       L.DomEvent.disableClickPropagation(container);
       L.DomEvent.disableScrollPropagation(container);
       L.DomEvent.on(button, 'click', () => {
-        const [homeLat, homeLon] = this._getHomeCoordinates();
-        this._map?.panTo([homeLat, homeLon], { animate: true });
+        const center = this._config.lock_map
+          ? this._map?.options.center : this._getHomeCoordinates();
+        if (center) this._map?.panTo(center, { animate: true });
       });
 
       return container;
@@ -2641,6 +2662,8 @@ class BomRadarCardEditor extends HTMLElement {
             </div>
           </div>
           <div class="help-text" id="map-centre-help">Leave blank to centre the map on your Home Assistant home location.</div>
+          ${this._toggle('lock_map', 'Lock map position', cfg.lock_map === true, 'lock-map-help')}
+          <div class="help-text" id="lock-map-help">Keep the map at its starting centre and let swipes scroll the dashboard. Map gestures are disabled; zoom buttons still work.</div>
           </div>
         </details>
 
@@ -2789,7 +2812,7 @@ class BomRadarCardEditor extends HTMLElement {
     });
 
     const toggles = [
-      'auto_hide_controls',
+      'auto_hide_controls', 'lock_map',
       'show_marker', 'show_zoom', 'show_recenter', 'show_layer_switcher', 'show_playback',
       'show_legend', 'show_weather_legend', 'show_legend_button', 'show_bom_boundaries', 'square_style', 'show_layer_label', 'show_attribution', 'allow_overzoom', 'use_custom_accent_color', 'use_custom_location_color',
       'show_lightning', 'lightning_pulse', 'show_radar_coverage',
@@ -2950,7 +2973,7 @@ class BomRadarCardEditor extends HTMLElement {
     });
 
     const toggleFields = [
-      'auto_hide_controls',
+      'auto_hide_controls', 'lock_map',
       'show_marker', 'show_zoom', 'show_recenter', 'show_layer_switcher', 'show_playback',
       'show_legend', 'show_weather_legend', 'show_legend_button', 'show_bom_boundaries', 'square_style', 'show_layer_label', 'show_attribution', 'allow_overzoom',
       'show_lightning', 'lightning_pulse', 'show_radar_coverage',

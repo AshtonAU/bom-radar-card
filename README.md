@@ -10,14 +10,14 @@ Native Australian Bureau of Meteorology radar and weather layers for Home Assist
 [![CI](https://github.com/AshtonAU/bom-radar-card/actions/workflows/ci.yml/badge.svg)](https://github.com/AshtonAU/bom-radar-card/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-**Current release: v1.13.0**
+**Current release: v1.14.0**
 
 </div>
 
 BOM Radar Card is a modern replacement for older Home Assistant radar cards that depended on the discontinued `api.weather.bom.gov.au` stack. It uses BOM's current public WMTS and MapServer services, with an interactive Leaflet map, animation, forecast layers, optional lightning, and a visual editor.
 
 > [!NOTE]
-> **v1.13.0 adds an optional controls theme.** Keep dashboard colours, or choose neutral Light or Dark controls in the visual editor. Existing YAML and default appearance remain unchanged. See the [changelog](CHANGELOG.md) for details.
+> **v1.14.0 adds map locking and three Stadia map styles.** Enable **Map → Lock map position** to scroll your dashboard without moving the map, or try Stamen Toner, Toner Lite and Alidade Bright. Map locking is off by default; existing configurations keep their current behaviour. See the [changelog](CHANGELOG.md) for details.
 
 ## At a glance
 
@@ -145,7 +145,8 @@ not need conversion.
 | `marker_latitude` | number | HA latitude | Override the marker latitude without changing the map center. Falls back to the configured center, then Sydney, when HA has no location. |
 | `marker_longitude` | number | HA longitude | Override the marker longitude without changing the map center. Falls back to the configured center, then Sydney, when HA has no location. |
 | `show_zoom` | boolean | `true` | Show Leaflet zoom controls. |
-| `show_recenter` | boolean | `true` | Show the button that recenters on the marker location. |
+| `lock_map` | boolean | `false` | Lock the starting centre and let swipes scroll the dashboard. Disables dragging, pinch, wheel, double-click, box and keyboard map gestures; zoom buttons, playback and layers still work. Set under **Map → Lock map position**. |
+| `show_recenter` | boolean | `true` | Show the button that recenters on the marker location, or the starting centre when `lock_map` is enabled. |
 | `show_layer_switcher` | boolean | `true` | Show the in-card layer switcher. |
 | `show_playback` | boolean | `true` | Show playback and timeline controls. |
 | `show_legend` | boolean | `true` | Show the rain-rate/reflectivity legend when applicable. |
@@ -410,7 +411,7 @@ read-only upstream checker alongside the shared strip and panel behavior.
 | --- | --- | --- |
 | `bom` | Default, Dark, Auto | Not required |
 | `carto` | Voyager Light, Dark Matter, Auto | Free key required for watermark-free raster tiles |
-| `stadia` | Alidade Light/Dark, Outdoors, OSM Bright, Terrain, Satellite, Stamen Toner | Domain auth or API key required |
+| `stadia` | Alidade Smooth, Smooth Dark, Bright, Outdoors, OSM Bright, Terrain, Satellite, Stamen Toner, Toner Lite | Domain auth or API key required |
 | `esri` | World Imagery, World Topographic | May be required |
 
 Set `basemap_provider: carto` to retain the card's older CARTO appearance. CARTO now authenticates its legacy raster tiles with a free key and is retiring those raster endpoints in favour of vector basemaps. BOM remains the durable no-key default. Provider access terms can change; if a third-party basemap rejects tile requests, configure that provider's authentication rather than changing BOM radar settings.
@@ -423,8 +424,12 @@ basemap_provider: stadia
 basemap_style: stamen_toner
 ```
 
-The same Stadia authentication requirements below apply to Toner. It changes
-only the basemap; weather-layer colours and the controls theme stay independent.
+Choose **Stamen Toner Lite** (`basemap_style: stamen_toner_lite`) for a softer
+monochrome map, or **Alidade Bright** (`basemap_style: alidade_bright`) for a
+colour map with distinct parks and waterways.
+
+The same Stadia authentication requirements below apply to these styles. They
+change only the basemap; weather-layer colours and the controls theme stay independent.
 
 ### Getting basemap provider keys
 
@@ -553,7 +558,7 @@ The card requests weather tiles from BOM's own mapping service rather than a thi
 - Confirm the resource is loaded as a **JavaScript module**.
 - Hard-refresh the browser or clear the Home Assistant frontend cache.
 - Remove old BOM radar resources that may register a conflicting custom element.
-- Open the browser console and confirm it reports `BOM-RADAR-CARD v1.13.0`.
+- Open the browser console and confirm it reports `BOM-RADAR-CARD v1.14.0`.
 
 ### The map changes width or framing after switching tabs
 

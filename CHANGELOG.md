@@ -1,9 +1,12 @@
 # Changelog
 
-## Unreleased
+## v1.14.0 - 2026-09-28
 
 ### Added
 
+- Add an optional Lock map position setting so swipes scroll the dashboard instead
+  of moving the map. Zoom buttons, playback and layers remain available. Addresses #26.
+- Add Stamen Toner Lite and Alidade Bright to the Stadia Maps style choices.
 - Add Stamen Toner under Stadia Maps in the map-style settings: a high-contrast
   black-and-white basemap suited to e-ink displays. Thanks to @jonathon-m in #25.
 

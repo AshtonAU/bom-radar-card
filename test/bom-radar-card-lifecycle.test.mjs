@@ -1716,44 +1716,51 @@ test('keeps basemap_api_key backward compatible for Stadia Maps and Esri without
   }
 });
 
-test('Stamen Toner initializes with Stadia authentication and attribution without changing the weather layer', async () => {
-  for (const apiKey of ['', '  toner ?&/  ']) {
-    const harness = createHarness();
-    const card = await initializeCard(harness, issueConfig({
-      basemap_provider: 'stadia',
-      basemap_style: 'stamen_toner',
-      basemap_api_key: apiKey,
-      carto_api_key: 'carto-only-key',
-    }));
-    const calls = harness.leafletState.tileLayerCalls.filter(({ url }) => url.includes('stadiamaps.com'));
-    assert.equal(calls.length, 1);
-    assert.equal(calls[0].url, 'https://tiles.stadiamaps.com/tiles/stamen_toner/{z}/{x}/{y}{r}.png' +
-      (apiKey ? '?api_key=toner%20%3F%26%2F' : ''));
-    for (const provider of ['Stadia Maps', 'Stamen Design', 'OpenMapTiles', 'OpenStreetMap', 'BOM']) {
-      assert.ok(calls[0].options.attribution.includes(provider));
+for (const [style, label, stamen] of [
+  ['stamen_toner', 'Stamen Toner', true],
+  ['stamen_toner_lite', 'Stamen Toner Lite', true],
+  ['alidade_bright', 'Alidade Bright', false],
+]) {
+  test(`${label} initializes with Stadia authentication and attribution without changing the weather layer`, async () => {
+    for (const apiKey of ['', '  sample ?&/  ']) {
+      const harness = createHarness();
+      const card = await initializeCard(harness, issueConfig({
+        basemap_provider: 'stadia',
+        basemap_style: style,
+        basemap_api_key: apiKey,
+        carto_api_key: 'carto-only-key',
+      }));
+      const calls = harness.leafletState.tileLayerCalls.filter(({ url }) => url.includes('stadiamaps.com'));
+      assert.equal(calls.length, 1);
+      assert.equal(calls[0].url, `https://tiles.stadiamaps.com/tiles/${style}/{z}/{x}/{y}{r}.png` +
+        (apiKey ? '?api_key=sample%20%3F%26%2F' : ''));
+      for (const provider of ['Stadia Maps', 'OpenMapTiles', 'OpenStreetMap', 'BOM']) {
+        assert.ok(calls[0].options.attribution.includes(provider));
+      }
+      assert.equal(calls[0].options.attribution.includes('Stamen Design'), stamen);
+      assert.equal(card._config.basemap_style, style);
+      assert.equal(card._committedRadarLayerKey, 'reflectivity');
+      setConnected(card, false);
     }
-    assert.equal(card._config.basemap_style, 'stamen_toner');
-    assert.equal(card._committedRadarLayerKey, 'reflectivity');
-    setConnected(card, false);
-  }
-});
+  });
 
-test('editor offers Stamen Toner and preserves its selection and Stadia key across a save', () => {
-  const harness = createHarness();
-  const editor = new harness.Editor();
-  editor.hass = issueHass();
-  editor.setConfig(issueConfig({ basemap_provider: 'stadia', basemap_style: 'alidade_light', basemap_api_key: 'test-key' }));
-  let saved;
-  editor.addEventListener('config-changed', event => { saved = event.detail.config; });
-  const styles = editor.shadowRoot.getElementById('basemap_style');
-  assert.match(editor.shadowRoot.innerHTML, /value="stamen_toner"[^>]*>Stamen Toner<\/option>/);
-  styles.value = 'stamen_toner';
-  styles.dispatchEvent({ type: 'change', target: styles });
-  assert.equal(saved.basemap_style, 'stamen_toner');
-  assert.equal(saved.basemap_api_key, 'test-key');
-  editor.setConfig(saved);
-  assert.equal(editor.shadowRoot.getElementById('basemap_style').value, 'stamen_toner');
-});
+  test(`editor offers ${label} and preserves its selection and Stadia key across a save`, () => {
+    const harness = createHarness();
+    const editor = new harness.Editor();
+    editor.hass = issueHass();
+    editor.setConfig(issueConfig({ basemap_provider: 'stadia', basemap_style: 'alidade_light', basemap_api_key: 'test-key' }));
+    let saved;
+    editor.addEventListener('config-changed', event => { saved = event.detail.config; });
+    const styles = editor.shadowRoot.getElementById('basemap_style');
+    assert.match(editor.shadowRoot.innerHTML, new RegExp(`value="${style}"[^>]*>${label}</option>`));
+    styles.value = style;
+    styles.dispatchEvent({ type: 'change', target: styles });
+    assert.equal(saved.basemap_style, style);
+    assert.equal(saved.basemap_api_key, 'test-key');
+    editor.setConfig(saved);
+    assert.equal(editor.shadowRoot.getElementById('basemap_style').value, style);
+  });
+}
 
 test('uses linked CARTO and OpenStreetMap attribution while preserving the user attribution toggle', async () => {
   for (const showAttribution of [undefined, true, false]) {
@@ -3002,4 +3009,79 @@ test('duplicate bundle evaluation preserves existing custom elements and card me
   ]);
   assert.equal(harness.window.customCards.length, 1);
   assert.equal(harness.customElements.get('bom-radar-card'), harness.Card);
+});
+
+test('map locking is opt-in and updates gesture options when toggled', async () => {
+  const harness = createHarness();
+  const card = await initializeCard(harness, issueConfig());
+  const gestures = ['dragging', 'touchZoom', 'scrollWheelZoom', 'doubleClickZoom', 'boxZoom', 'keyboard', 'tapHold'];
+  assert.equal(card._config.lock_map, false);
+  for (const gesture of gestures) assert.equal(card._map.options[gesture], undefined);
+  const firstMap = card._map;
+  card.setConfig(issueConfig({ lock_map: true, center_latitude: -32, center_longitude: 150 }));
+  await flushUntil(() => card._map && card._map !== firstMap && timeline(card)?.children.length === 9);
+  assert.equal(firstMap.removed, true);
+  for (const gesture of gestures) assert.equal(card._map.options[gesture], false);
+  assert.deepEqual(Array.from(card._map.options.center), [-32, 150]);
+  const lockedMap = card._map;
+  card.setConfig(issueConfig({ lock_map: false }));
+  await flushUntil(() => card._map && card._map !== lockedMap && timeline(card)?.children.length === 9);
+  for (const gesture of gestures) assert.equal(card._map.options[gesture], undefined);
+  setConnected(card, false);
+});
+
+test('locked recenter preserves custom starting centre and playback and layer controls remain usable', async () => {
+  const harness = createHarness({ renderControlContainers: true });
+  const card = await initializeCard(harness, issueConfig({ lock_map: true, show_recenter: true,
+    show_playback: true, show_layer_switcher: true, center_latitude: -32, center_longitude: 150 }));
+  let destination;
+  card._map.panTo = center => { destination = Array.from(center); };
+  const recenter = card.shadowRoot.querySelector('.bom-recenter-button');
+  assert.equal(recenter.getAttribute('aria-label'), 'Recenter to starting location');
+  recenter.click();
+  assert.deepEqual(destination, [-32, 150]);
+  card.shadowRoot.getElementById('play-btn').click();
+  assert.equal(card._playing, false);
+  card._layerSwitcher.button.click();
+  assert.equal(card._layerSwitcher.panel.classList.contains('is-open'), true);
+  setConnected(card, false);
+});
+
+test('editor saves lock_map independently of recenter visibility and round-trips both states', () => {
+  const harness = createHarness();
+  const editor = new harness.Editor();
+  let config;
+  editor.addEventListener('config-changed', event => { config = event.detail.config; });
+  editor.setConfig(issueConfig({ show_recenter: false }));
+  assert.equal(editor.shadowRoot.getElementById('lock_map').checked, false);
+  for (const checked of [true, false]) {
+    const toggle = editor.shadowRoot.getElementById('lock_map');
+    toggle.checked = checked;
+    toggle.dispatchEvent({ type: 'change', target: toggle });
+    assert.equal(config.lock_map, checked);
+    assert.equal(config.show_recenter, false);
+    editor.setConfig(config);
+    assert.equal(editor.shadowRoot.getElementById('lock_map').checked, checked);
+  }
+});
+
+test('locked map allows the first wake swipe to scroll without activating hidden controls', async () => {
+  const harness = createHarness({ renderControlContainers: true });
+  const card = await initializeCard(harness, issueConfig({ lock_map: true, auto_hide_controls: true }));
+  const content = card.shadowRoot.querySelector('.card-content');
+  const map = card.shadowRoot.getElementById('map');
+  harness.scheduler.runNextTimeout(10_000);
+  for (const type of ['pointerdown', 'touchstart', 'pointermove', 'touchmove']) {
+    const event = dispatchToolbarActivity(content, type, map, { pointerType: 'touch' });
+    assert.equal(event.defaultPrevented, undefined, type);
+    assert.equal(event.propagationStopped, true, type);
+  }
+  assert.equal(content.classList.contains('is-idle'), false);
+  const end = dispatchToolbarActivity(harness.window, 'pointerup', map, { pointerType: 'touch' });
+  assert.equal(end.defaultPrevented, undefined);
+  assert.equal(dispatchToolbarActivity(content, 'click', map).defaultPrevented, true);
+  assert.equal(dispatchToolbarActivity(content, 'pointerdown', map).defaultPrevented, undefined);
+  dispatchToolbarActivity(harness.window, 'pointercancel', map);
+  assert.equal(dispatchToolbarActivity(content, 'click', map).defaultPrevented, undefined);
+  setConnected(card, false);
 });

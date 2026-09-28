@@ -3,7 +3,7 @@ const CLICK_GUARD_MS = 700;
 
 // Keep keyboard access intact: opacity hides only the visual chrome, and
 // focusin reveals it synchronously before the focused control is painted.
-export function createAutoHideControls({ content, windowTarget, getActiveElement, isControlFocused, isPanelOpen }) {
+export function createAutoHideControls({ content, windowTarget, getActiveElement, isControlFocused, isPanelOpen, allowPageScroll = false }) {
   let idleTimer = null;
   let clickGuardTimer = null;
   let hidden = false;
@@ -33,7 +33,8 @@ export function createAutoHideControls({ content, windowTarget, getActiveElement
     }, IDLE_DELAY_MS);
   };
   const stop = event => {
-    event.preventDefault();
+    // A locked map must allow the first swipe to scroll even while waking chrome.
+    if (!allowPageScroll || !/^(pointer|touch)/.test(event.type)) event.preventDefault();
     event.stopImmediatePropagation();
   };
   const isWakeSurface = event => {
