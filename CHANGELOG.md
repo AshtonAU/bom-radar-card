@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Add **Playback → When the card opens**, with continuous playback (the default),
+  play once, and start paused modes. YAML: `startup_playback: loop | once | paused`.
+  Play once pauses on the final frame; pressing Play then starts normal looping.
+  Paused cards continue refreshing their weather data.
+
+### Fixed
+
+- Preserve playback state through card reconnects, automatic day/night map
+  changes and unrelated settings edits. Keep one-shot progress through refreshes
+  and reconnects, and synchronize the playback button with the actual state.
+
 ## v1.14.0 - 2026-09-28
 
 ### Added
