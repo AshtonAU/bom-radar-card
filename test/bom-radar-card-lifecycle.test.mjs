@@ -1617,6 +1617,74 @@ test('town and city names remain available through the generic BOM reference-lay
   setConnected(card, false);
 });
 
+test('an initialized card adds and removes the town and city overlay when its config changes', async () => {
+  const harness = createHarness();
+  const card = await initializeCard(harness, issueConfig());
+  assert.equal(card._bomReferenceLayers.length, 0);
+
+  card.setConfig(issueConfig({ show_place_names: true }));
+  await flushUntil(() => harness.leafletState.maps.length === 2 && card._bomReferenceLayers.length === 1);
+  const firstOverlay = card._bomReferenceLayers[0];
+  assert.equal(harness.leafletState.maps[0].removed, true);
+  assert.ok(card._map.hasLayer(firstOverlay));
+
+  card.setConfig(issueConfig({ show_place_names: false }));
+  await flushUntil(() => harness.leafletState.maps.length === 3 && card._bomReferenceLayers.length === 0);
+  assert.equal(harness.leafletState.maps[1].removed, true);
+  assert.equal(card._map.hasLayer(firstOverlay), false);
+
+  card.setConfig(issueConfig({ show_place_names: true }));
+  await flushUntil(() => harness.leafletState.maps.length === 4 && card._bomReferenceLayers.length === 1);
+  assert.notEqual(card._bomReferenceLayers[0], firstOverlay);
+  assert.equal(harness.leafletState.tileLayerCalls.filter(({ url }) => url.includes('/towns_and_cities/')).length, 2);
+  setConnected(card, false);
+});
+
+test('town and city labels survive radar refreshes, product switches, and reconnects', async () => {
+  const harness = createHarness();
+  const card = await initializeCard(harness, issueConfig({ show_place_names: true }));
+  const originalOverlay = card._bomReferenceLayers[0];
+  assert.ok(originalOverlay);
+
+  await card._refreshData();
+  assert.equal(card._bomReferenceLayers[0], originalOverlay);
+  assert.equal(card._map.hasLayer(originalOverlay), true);
+
+  await card._setLayer('rain_rate');
+  assert.equal(card._bomReferenceLayers[0], originalOverlay);
+  assert.equal(card._map.hasLayer(originalOverlay), true);
+  assert.equal(harness.leafletState.tileLayerCalls.filter(({ url }) => url.includes('/towns_and_cities/')).length, 1);
+
+  const originalMap = card._map;
+  setConnected(card, false);
+  assert.equal(originalMap.removed, true);
+  assert.equal(originalMap.hasLayer(originalOverlay), false);
+  setConnected(card, true);
+  await flushUntil(() => harness.leafletState.maps.length === 2 && timeline(card)?.children.length === 9);
+
+  assert.equal(card._config.show_place_names, true);
+  assert.equal(card._config.layer, 'rain_rate');
+  assert.equal(card._bomReferenceLayers.length, 1);
+  assert.ok(card._map.hasLayer(card._bomReferenceLayers[0]));
+  assert.notEqual(card._bomReferenceLayers[0], originalOverlay);
+  assert.equal(harness.leafletState.tileLayerCalls.filter(({ url }) => url.includes('/towns_and_cities/')).length, 2);
+  setConnected(card, false);
+});
+
+test('the boolean and reference-layer alias create one town and city overlay', async () => {
+  const harness = createHarness();
+  const card = await initializeCard(harness, issueConfig({
+    show_place_names: true,
+    bom_reference_layers: [' towns_and_cities ', 'coastal_areas', 'towns_and_cities', 'unknown'],
+  }));
+
+  assert.deepEqual(Array.from(card._config.bom_reference_layers), ['towns_and_cities', 'coastal_areas']);
+  assert.equal(card._bomReferenceLayers.length, 2);
+  assert.equal(harness.leafletState.tileLayerCalls.filter(({ url }) => url.includes('/towns_and_cities/')).length, 1);
+  assert.equal(harness.leafletState.tileLayerCalls.filter(({ url }) => url.includes('/coastal_areas/')).length, 1);
+  setConnected(card, false);
+});
+
 test('editor saves and restores the town and city names toggle', () => {
   const harness = createHarness();
   const editor = new harness.Editor();
@@ -1638,6 +1706,31 @@ test('editor saves and restores the town and city names toggle', () => {
   legacyToggle.dispatchEvent({ type: 'change', target: legacyToggle });
   assert.equal(changedConfig.show_place_names, false);
   assert.equal(changedConfig.bom_reference_layers, undefined);
+});
+
+test('editor migrates the town and city alias on unrelated edits while preserving other overlays', () => {
+  const harness = createHarness();
+  const editor = new harness.Editor();
+  editor.setConfig(issueConfig({
+    show_bom_boundaries: true,
+    bom_reference_layers: ['towns_and_cities', 'coastal_areas', 'towns_and_cities', 'railways'],
+  }));
+  assert.equal(editor.shadowRoot.getElementById('show_place_names').checked, true);
+  assert.equal(editor.shadowRoot.getElementById('show_bom_boundaries').checked, true);
+  assert.equal(editor.shadowRoot.getElementById('bom_reference_layer__coastal_areas').checked, true);
+  assert.equal(editor.shadowRoot.getElementById('bom_reference_layer__railways').checked, true);
+
+  let changedConfig;
+  editor.addEventListener('config-changed', event => { changedConfig = event.detail.config; });
+  const unrelatedToggle = editor.shadowRoot.getElementById('show_zoom');
+  unrelatedToggle.checked = true;
+  unrelatedToggle.dispatchEvent({ type: 'change', target: unrelatedToggle });
+
+  assert.equal(changedConfig.show_place_names, true);
+  assert.equal(changedConfig.show_bom_boundaries, true);
+  assert.equal(changedConfig.show_zoom, true);
+  assert.deepEqual(Array.from(changedConfig.bom_reference_layers), ['coastal_areas', 'railways']);
+  assert.equal(changedConfig.bom_reference_layers.includes('towns_and_cities'), false);
 });
 
 test('adds the trimmed and encoded CARTO key to base and label tiles for light, dark, and auto styles', async () => {
