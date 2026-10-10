@@ -124,8 +124,9 @@ not need conversion.
 | `basemap_style` | string | `auto` | Provider style, including automatic day/night switching where supported. |
 | `carto_api_key` | string | none | CARTO browser key. Required for watermark-free CARTO raster tiles and never sent to another provider. |
 | `basemap_api_key` | string | none | Optional Stadia Maps or Esri browser key. Never sent to BOM or CARTO. |
-| `bom_reference_layers` | list | none | Add `state_borders`, `coastal_areas`, `forecast_districts`, `drainage_divisions`, `railways`, or `lakes`. |
+| `bom_reference_layers` | list | none | Add `state_borders`, `towns_and_cities`, `coastal_areas`, `forecast_districts`, `drainage_divisions`, `railways`, or `lakes`. |
 | `show_bom_boundaries` | boolean | `false` | Legacy shortcut that adds `state_borders`. |
+| `show_place_names` | boolean | `false` | Show official BOM town and city names above the weather layer. Names appear progressively from zoom 4–10. |
 | `show_radar_coverage` | boolean | `false` | Shade areas outside BOM's radar-network coverage above `rain_rate` or `reflectivity`. It is ignored for other weather layers. |
 
 ### Animation and appearance
@@ -223,9 +224,12 @@ bom_reference_layers:
   - state_borders
   - forecast_districts
   - coastal_areas
+show_place_names: true
 ```
 
-These public BOM MapServer layers render above the weather overlay.
+These public BOM reference layers render above the weather overlay. Town and
+city names use BOM's cached map tiles, which progressively add labels as the
+map zooms in and apply BOM's own placement and deconfliction rules.
 
 </details>
 

@@ -6,6 +6,8 @@ import { generateFallbackTimestamps } from '../src/timestamps.js';
 const CAPABILITIES_URL =
   'https://api.bom.gov.au/apikey/v1/mapping/timeseries/wmts/1.0.0/WMTSCapabilities.xml';
 const WMTS_BASE = 'https://api.bom.gov.au/apikey/v1/mapping/timeseries/wmts';
+const TOWNS_AND_CITIES_TILE_URL =
+  'https://api.bom.gov.au/apikey/v1/mapping/overlays/towns_and_cities/MapServer/tile/7/76/117?blankTile=false';
 const PNG_SIGNATURE = [137, 80, 78, 71, 13, 10, 26, 10];
 const REQUEST_TIMEOUT_MS = 20_000;
 const REQUEST_ATTEMPTS = 3;
@@ -360,8 +362,9 @@ for (const [layerKey, time] of availabilityProbeChecks) {
 await Promise.all([
   checkPngUrl('BOM radar coverage z0', createRadarCoverageTileUrl(0, 0, 0)),
   checkPngUrl('BOM radar coverage Australia z5', createRadarCoverageTileUrl(5, 19, 29)),
+  checkPngUrl('BOM towns and cities Sydney z7', TOWNS_AND_CITIES_TILE_URL),
 ]);
-checkedTiles += 2;
+checkedTiles += 3;
 
 console.log(
   `Runtime upstream check passed: ${configuredLayerIds.length} BOM layers with matching matrix sets, cadence, ` +

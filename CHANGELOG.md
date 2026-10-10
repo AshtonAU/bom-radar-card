@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Add an optional **Map → Boundaries and landmarks → Town and city names**
+  toggle (`show_place_names: true`). Labels use BOM's official cached map
+  tiles and follow BOM's zoom and deconfliction rules.
+
 ## v1.14.0 - 2026-09-28
 
 ### Added

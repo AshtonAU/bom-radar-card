@@ -71,6 +71,7 @@ const RADAR_COVERAGE_PANE_Z_INDEX = 350;
 const BOM_REFERENCE_OVERLAY_BASE_URL = 'https://api.bom.gov.au/apikey/v1/mapping/overlays';
 const BOM_REFERENCE_OVERLAY_STYLES = {
   state_borders: { name: 'State borders' },
+  towns_and_cities: { name: 'Town and city names' },
   coastal_areas: { name: 'Coastal areas' },
   forecast_districts: { name: 'Forecast districts' },
   drainage_divisions: { name: 'Drainage divisions' },
@@ -389,6 +390,9 @@ function getBomReferenceLayerKeys(config) {
 
   if (config?.show_bom_boundaries === true && !layerKeys.includes('state_borders')) {
     layerKeys.unshift('state_borders');
+  }
+  if (config?.show_place_names === true && !layerKeys.includes('towns_and_cities')) {
+    layerKeys.push('towns_and_cities');
   }
 
   return layerKeys;
@@ -1295,6 +1299,7 @@ class BomRadarCard extends HTMLElement {
       show_legend_button: config.show_legend_button !== false,
       show_bom_boundaries: config.show_bom_boundaries === true,
       bom_reference_layers: getBomReferenceLayerKeys(config),
+      show_place_names: config.show_place_names === true,
       show_radar_coverage: config.show_radar_coverage === true,
       square_style: config.square_style === true,
       show_attribution: config.show_attribution !== false,
@@ -2505,7 +2510,7 @@ class BomRadarCardEditor extends HTMLElement {
     const radarCoverageAvailable = supportsRadarCoverageLayer(activeEditorLayer);
     const blitzLoaded = isBlitzortungLoaded(this._hass);
     const additionalBomReferenceLayers = Object.entries(BOM_REFERENCE_OVERLAY_STYLES)
-      .filter(([key]) => key !== 'state_borders');
+      .filter(([key]) => !['state_borders', 'towns_and_cities'].includes(key));
     this.shadowRoot.innerHTML = `
       <style>
         ${UI_THEME_CSS}
@@ -2633,6 +2638,7 @@ class BomRadarCardEditor extends HTMLElement {
             <summary id="reference-overlays-title">Boundaries and landmarks</summary>
             <div role="group" aria-labelledby="reference-overlays-title">
               ${this._toggle('show_bom_boundaries', 'State borders', bomReferenceLayerKeys.includes('state_borders'))}
+              ${this._toggle('show_place_names', 'Town and city names', bomReferenceLayerKeys.includes('towns_and_cities'))}
               ${additionalBomReferenceLayers.map(([key, layer]) =>
                 this._toggle(`bom_reference_layer__${key}`, layer.name, bomReferenceLayerKeys.includes(key))
               ).join('')}
@@ -2814,7 +2820,7 @@ class BomRadarCardEditor extends HTMLElement {
     const toggles = [
       'auto_hide_controls', 'lock_map',
       'show_marker', 'show_zoom', 'show_recenter', 'show_layer_switcher', 'show_playback',
-      'show_legend', 'show_weather_legend', 'show_legend_button', 'show_bom_boundaries', 'square_style', 'show_layer_label', 'show_attribution', 'allow_overzoom', 'use_custom_accent_color', 'use_custom_location_color',
+      'show_legend', 'show_weather_legend', 'show_legend_button', 'show_bom_boundaries', 'show_place_names', 'square_style', 'show_layer_label', 'show_attribution', 'allow_overzoom', 'use_custom_accent_color', 'use_custom_location_color',
       'show_lightning', 'lightning_pulse', 'show_radar_coverage',
     ];
     toggles.forEach(id => {
@@ -2873,7 +2879,7 @@ class BomRadarCardEditor extends HTMLElement {
     }
 
     const selectedReferenceLayerKeys = Object.keys(BOM_REFERENCE_OVERLAY_STYLES)
-      .filter((key) => key !== 'state_borders')
+      .filter((key) => !['state_borders', 'towns_and_cities'].includes(key))
       .filter((key) => get(`bom_reference_layer__${key}`)?.checked);
     if (selectedReferenceLayerKeys.length) {
       config.bom_reference_layers = selectedReferenceLayerKeys;
@@ -2975,7 +2981,7 @@ class BomRadarCardEditor extends HTMLElement {
     const toggleFields = [
       'auto_hide_controls', 'lock_map',
       'show_marker', 'show_zoom', 'show_recenter', 'show_layer_switcher', 'show_playback',
-      'show_legend', 'show_weather_legend', 'show_legend_button', 'show_bom_boundaries', 'square_style', 'show_layer_label', 'show_attribution', 'allow_overzoom',
+      'show_legend', 'show_weather_legend', 'show_legend_button', 'show_bom_boundaries', 'show_place_names', 'square_style', 'show_layer_label', 'show_attribution', 'allow_overzoom',
       'show_lightning', 'lightning_pulse', 'show_radar_coverage',
     ];
     toggleFields.forEach(id => {

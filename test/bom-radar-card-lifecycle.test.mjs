@@ -1587,6 +1587,59 @@ test('auto basemap keeps its current style without sun data and restarts on day-
   setConnected(card, false);
 });
 
+test('town and city names are opt-in BOM tiles above the weather layer', async () => {
+  const defaultHarness = createHarness();
+  const defaultCard = await initializeCard(defaultHarness, issueConfig());
+  assert.equal(defaultCard._config.show_place_names, false);
+  assert.equal(defaultHarness.leafletState.tileLayerCalls.some(({ url }) => url.includes('/towns_and_cities/')), false);
+  setConnected(defaultCard, false);
+
+  const harness = createHarness();
+  const card = await initializeCard(harness, issueConfig({ show_place_names: true }));
+  const placeCall = harness.leafletState.tileLayerCalls.find(({ url }) => url.includes('/towns_and_cities/'));
+  assert.ok(placeCall);
+  assert.equal(
+    placeCall.url,
+    'https://api.bom.gov.au/apikey/v1/mapping/overlays/towns_and_cities/MapServer/tile/{z}/{y}/{x}?blankTile=false',
+  );
+  assert.equal(placeCall.options.maxNativeZoom, 10);
+  assert.equal(placeCall.options.pane, 'overlayPane');
+  assert.equal(card._config.show_place_names, true);
+  assert.ok(card._config.bom_reference_layers.includes('towns_and_cities'));
+  setConnected(card, false);
+});
+
+test('town and city names remain available through the generic BOM reference-layer YAML', async () => {
+  const harness = createHarness();
+  const card = await initializeCard(harness, issueConfig({ bom_reference_layers: ['towns_and_cities'] }));
+  assert.equal(harness.leafletState.tileLayerCalls.filter(({ url }) => url.includes('/towns_and_cities/')).length, 1);
+  assert.equal(card._config.bom_reference_layers.filter((key) => key === 'towns_and_cities').length, 1);
+  setConnected(card, false);
+});
+
+test('editor saves and restores the town and city names toggle', () => {
+  const harness = createHarness();
+  const editor = new harness.Editor();
+  let changedConfig;
+  editor.addEventListener('config-changed', event => { changedConfig = event.detail.config; });
+  editor.setConfig(issueConfig());
+  const toggle = editor.shadowRoot.getElementById('show_place_names');
+  assert.equal(toggle.checked, false);
+  toggle.checked = true;
+  toggle.dispatchEvent({ type: 'change', target: toggle });
+  assert.equal(changedConfig.show_place_names, true);
+  editor.setConfig(changedConfig);
+  assert.equal(editor.shadowRoot.getElementById('show_place_names').checked, true);
+
+  editor.setConfig({ ...issueConfig(), bom_reference_layers: ['towns_and_cities'] });
+  const legacyToggle = editor.shadowRoot.getElementById('show_place_names');
+  assert.equal(legacyToggle.checked, true);
+  legacyToggle.checked = false;
+  legacyToggle.dispatchEvent({ type: 'change', target: legacyToggle });
+  assert.equal(changedConfig.show_place_names, false);
+  assert.equal(changedConfig.bom_reference_layers, undefined);
+});
+
 test('adds the trimmed and encoded CARTO key to base and label tiles for light, dark, and auto styles', async () => {
   const expectedKeySuffix = '?key=abc%20%3F%26%2F';
   const scenarios = [
