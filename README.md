@@ -133,6 +133,7 @@ not need conversion.
 | Option | Type | Default | Description |
 | --- | --- | --- | --- |
 | `frame_count` | number | `9` | Maximum animation frames, clamped to 1–9. Some daily products provide fewer. |
+| `startup_playback` | string | `loop` | Playback on a fresh card load: `loop`, `once`, or `paused`. Set under **Playback → When the card opens**. `once` plays from the first frame to the final frame and pauses; `paused` starts on the latest radar observation (the first frame for forecast layers). Pressing Play starts continuous playback in either mode. |
 | `frame_delay` | number | `500` | Delay between frames in milliseconds; minimum 100 ms. |
 | `restart_delay` | number | `1500` | Pause on the final frame in milliseconds; minimum 500 ms. |
 | `radar_opacity` | number | `0.7` | Weather overlay opacity from 0.1–1.0. |
@@ -184,6 +185,27 @@ See the integration's [configuration guidance](https://github.com/mrk-its/homeas
 Unknown YAML keys are ignored so migrated dashboards continue loading. Use `radar_opacity` for the BOM overlay; keys from other radar cards such as `overlay_transparency` and `show_scale` are not supported.
 
 ## Common recipes
+
+**Play once when opening the dashboard**
+
+Choose **Playback → When the card opens → Play once** in the visual editor, or:
+
+```yaml
+type: custom:bom-radar-card
+startup_playback: once
+```
+
+The animation runs from the first frame to the final frame, then pauses.
+Choose `paused` to start with a still image instead, or `loop` for the default
+continuous playback. Pressing Play starts continuous playback in any mode.
+While paused, data still refreshes every five minutes: radar shows the latest
+observation and forecast layers show their first available frame.
+
+Playback state survives temporary removal and reconnection of the same card,
+map-style changes, and unrelated settings edits. A fresh page load or a newly
+created card uses the startup preference again. Changing the startup preference
+in the editor applies it immediately. With playback controls hidden, use the
+editor to change modes or re-enable the controls to play manually.
 
 <details>
 <summary><strong>Automatic day/night basemap</strong></summary>
