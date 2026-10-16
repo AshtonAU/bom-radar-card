@@ -10,14 +10,14 @@ Native Australian Bureau of Meteorology radar and weather layers for Home Assist
 [![CI](https://github.com/AshtonAU/bom-radar-card/actions/workflows/ci.yml/badge.svg)](https://github.com/AshtonAU/bom-radar-card/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-**Current release: v1.14.0**
+**Current release: v1.15.0**
 
 </div>
 
 BOM Radar Card is a modern replacement for older Home Assistant radar cards that depended on the discontinued `api.weather.bom.gov.au` stack. It uses BOM's current public WMTS and MapServer services, with an interactive Leaflet map, animation, forecast layers, optional lightning, and a visual editor.
 
 > [!NOTE]
-> **v1.14.0 adds map locking and three Stadia map styles.** Enable **Map → Lock map position** to scroll your dashboard without moving the map, or try Stamen Toner, Toner Lite and Alidade Bright. Map locking is off by default; existing configurations keep their current behaviour. See the [changelog](CHANGELOG.md) for details.
+> **v1.15.0 adds town/city labels and startup playback options.** Enable **Map → Boundaries and landmarks → Town and city names**, or choose **Playback → When the card opens** to play once or start paused. Existing cards keep continuous playback and labels off. See the [changelog](CHANGELOG.md) for details.
 
 ## At a glance
 
@@ -124,8 +124,9 @@ not need conversion.
 | `basemap_style` | string | `auto` | Provider style, including automatic day/night switching where supported. |
 | `carto_api_key` | string | none | CARTO browser key. Required for watermark-free CARTO raster tiles and never sent to another provider. |
 | `basemap_api_key` | string | none | Optional Stadia Maps or Esri browser key. Never sent to BOM or CARTO. |
-| `bom_reference_layers` | list | none | Add `state_borders`, `coastal_areas`, `forecast_districts`, `drainage_divisions`, `railways`, or `lakes`. |
+| `bom_reference_layers` | list | none | Add `state_borders`, `towns_and_cities`, `coastal_areas`, `forecast_districts`, `drainage_divisions`, `railways`, or `lakes`. |
 | `show_bom_boundaries` | boolean | `false` | Legacy shortcut that adds `state_borders`. |
+| `show_place_names` | boolean | `false` | Show official BOM town and city names above the weather layer. Names appear progressively from zoom 4–10. |
 | `show_radar_coverage` | boolean | `false` | Shade areas outside BOM's radar-network coverage above `rain_rate` or `reflectivity`. It is ignored for other weather layers. |
 
 ### Animation and appearance
@@ -245,9 +246,12 @@ bom_reference_layers:
   - state_borders
   - forecast_districts
   - coastal_areas
+show_place_names: true
 ```
 
-These public BOM MapServer layers render above the weather overlay.
+These public BOM reference layers render above the weather overlay. Town and
+city names use BOM's cached map tiles, which progressively add labels as the
+map zooms in and apply BOM's own placement and deconfliction rules.
 
 </details>
 

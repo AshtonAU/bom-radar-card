@@ -1,9 +1,12 @@
 # Changelog
 
-## Unreleased
+## v1.15.0 - 2026-10-16
 
 ### Added
 
+- Add an optional **Map → Boundaries and landmarks → Town and city names**
+  toggle (`show_place_names: true`). Labels use BOM's official cached map
+  tiles and follow BOM's zoom and deconfliction rules.
 - Add **Playback → When the card opens**, with continuous playback (the default),
   play once, and start paused modes. YAML: `startup_playback: loop | once | paused`.
   Play once pauses on the final frame; pressing Play then starts normal looping.
