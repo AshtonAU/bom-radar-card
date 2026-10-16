@@ -39,7 +39,7 @@ import { getLayerPickerBounds } from './layer-picker-layout.js';
 import { UI_THEME_CSS, getUiTheme, normalizeUiTheme, syncUiTheme, observeUiTheme } from './ui-theme.js';
 import { createAutoHideControls } from './auto-hide-controls.js';
 
-const CARD_VERSION = '1.14.0';
+const CARD_VERSION = '1.15.0';
 const DEFAULT_ACCENT_COLOR = '#00BCD4';
 const DEFAULT_UI_ACCENT_COLOR = '#F8FAFC';
 

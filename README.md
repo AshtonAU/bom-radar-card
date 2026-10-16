@@ -10,14 +10,14 @@ Native Australian Bureau of Meteorology radar and weather layers for Home Assist
 [![CI](https://github.com/AshtonAU/bom-radar-card/actions/workflows/ci.yml/badge.svg)](https://github.com/AshtonAU/bom-radar-card/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-**Current release: v1.14.0**
+**Current release: v1.15.0**
 
 </div>
 
 BOM Radar Card is a modern replacement for older Home Assistant radar cards that depended on the discontinued `api.weather.bom.gov.au` stack. It uses BOM's current public WMTS and MapServer services, with an interactive Leaflet map, animation, forecast layers, optional lightning, and a visual editor.
 
 > [!NOTE]
-> **v1.14.0 adds map locking and three Stadia map styles.** Enable **Map → Lock map position** to scroll your dashboard without moving the map, or try Stamen Toner, Toner Lite and Alidade Bright. Map locking is off by default; existing configurations keep their current behaviour. See the [changelog](CHANGELOG.md) for details.
+> **v1.15.0 adds town/city labels and startup playback options.** Enable **Map → Boundaries and landmarks → Town and city names**, or choose **Playback → When the card opens** to play once or start paused. Existing cards keep continuous playback and labels off. See the [changelog](CHANGELOG.md) for details.
 
 ## At a glance
 
