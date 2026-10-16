@@ -1501,7 +1501,7 @@ test('cleans up a partial map failure and recovers on a later hass update', asyn
   setConnected(card, false);
 });
 
-test('setConfig restarts an initialized paused card in its documented playing state', async () => {
+test('unrelated setConfig preserves a manually paused card', async () => {
   const harness = createHarness();
   const card = new harness.Card();
   card.setConfig(issueConfig());
@@ -1519,15 +1519,229 @@ test('setConfig restarts an initialized paused card in its documented playing st
 
   const restartedPlayButton = card.shadowRoot.getElementById('play-btn');
   assert.equal(firstMap.removed, true);
-  assert.match(restartedPlayButton.innerHTML, /<rect/);
+  assert.match(restartedPlayButton.innerHTML, /M8 5v14l11-7z/);
+  assert.equal(restartedPlayButton.getAttribute('aria-label'), 'Play animation');
+  assert.equal(card._playing, false);
   assert.equal(activeFrameIndex(card), 8);
   assert.equal(card.shadowRoot.getElementById('map').style.height, '500px');
-  assert.ok(harness.scheduler.activeTimeoutDelays().includes(500));
-
-  harness.scheduler.runNextTimeout(500);
-  assert.equal(activeFrameIndex(card), 0);
+  assert.ok(!harness.scheduler.activeTimeoutDelays().includes(500));
 
   setConnected(card, false);
+});
+
+test('startup playback defaults to continuous looping, including invalid YAML values', async () => {
+  for (const startup_playback of [undefined, 'loop', 'unknown', null, true]) {
+    const harness = createHarness();
+    const card = await initializeCard(harness, issueConfig({ startup_playback, frame_count: 3 }));
+    assert.equal(card._playing, true);
+    assert.equal(activeFrameIndex(card), 2);
+    assert.equal(card.shadowRoot.getElementById('play-btn').getAttribute('aria-label'), 'Pause animation');
+    harness.scheduler.runNextTimeout(500);
+    assert.equal(activeFrameIndex(card), 0);
+    setConnected(card, false);
+  }
+});
+
+test('play once shows every frame chronologically then pauses; manual Play resumes normal looping', async () => {
+  const harness = createHarness();
+  const card = await initializeCard(harness, issueConfig({ startup_playback: 'once', frame_count: 3 }));
+  const button = card.shadowRoot.getElementById('play-btn');
+  assert.equal(activeFrameIndex(card), 0);
+  assert.equal(card._playing, true);
+  harness.scheduler.runNextTimeout(500);
+  assert.equal(activeFrameIndex(card), 1);
+  harness.scheduler.runNextTimeout(500);
+  assert.equal(activeFrameIndex(card), 2);
+  assert.equal(card._playing, false);
+  assert.equal(button.getAttribute('aria-label'), 'Play animation');
+  assert.match(button.innerHTML, /M8 5v14l11-7z/);
+  assert.ok(!harness.scheduler.activeTimeoutDelays().some(delay => delay === 500 || delay === 1500));
+
+  button.click();
+  harness.scheduler.runNextTimeout(500);
+  assert.equal(activeFrameIndex(card), 0);
+  harness.scheduler.runNextTimeout(500);
+  harness.scheduler.runNextTimeout(500);
+  assert.equal(activeFrameIndex(card), 2);
+  assert.equal(card._playing, true);
+  assert.equal(button.getAttribute('aria-label'), 'Pause animation');
+  harness.scheduler.runNextTimeout(1500);
+  assert.equal(activeFrameIndex(card), 0);
+  setConnected(card, false);
+});
+
+test('start paused retains the layer default frame and continues refreshing without animation', async () => {
+  for (const [layer, expectedFrame] of [['reflectivity', 2], ['forecast_rain_chance_daily', 0]]) {
+    const harness = createHarness();
+    const card = await initializeCard(harness, issueConfig({ startup_playback: 'paused', layer, frame_count: 3 }));
+    assert.equal(activeFrameIndex(card), expectedFrame);
+    assert.equal(card._playing, false);
+    assert.equal(card.shadowRoot.getElementById('play-btn').getAttribute('aria-label'), 'Play animation');
+    assert.ok(!harness.scheduler.activeTimeoutDelays().includes(500));
+    const oldLayers = [...card._radarLayers];
+    const refresh = [...harness.scheduler.intervals.values()].find(timer => timer.delay === 300000);
+    assert.ok(refresh, 'paused cards must still refresh weather data every five minutes');
+    await refresh.callback();
+    assert.ok(card._radarLayers.every(layer => !oldLayers.includes(layer)), 'refresh replaces the weather data');
+    assert.equal(activeFrameIndex(card), expectedFrame);
+    assert.equal(card._playing, false);
+    assert.ok(!harness.scheduler.activeTimeoutDelays().includes(500));
+    setConnected(card, false);
+  }
+});
+
+test('a completed play-once sequence stays paused through refresh and same-element reconnect', async () => {
+  const harness = createHarness();
+  const card = await initializeCard(harness, issueConfig({ startup_playback: 'once', frame_count: 3 }));
+  harness.scheduler.runNextTimeout(500);
+  harness.scheduler.runNextTimeout(500);
+  await card._refreshData();
+  assert.equal(activeFrameIndex(card), 2);
+  assert.equal(card._playing, false);
+  setConnected(card, false);
+  setConnected(card, true);
+  await flushUntil(() => timeline(card)?.children.length === 3 && card._radarLayers.length === 3);
+  assert.equal(activeFrameIndex(card), 2);
+  assert.equal(card._playing, false);
+  assert.equal(card.shadowRoot.getElementById('play-btn').getAttribute('aria-label'), 'Play animation');
+  assert.ok(!harness.scheduler.activeTimeoutDelays().includes(500));
+  setConnected(card, false);
+});
+
+test('single-frame play once immediately settles paused without an animation timer', async () => {
+  const harness = createHarness();
+  const card = await initializeCard(harness, issueConfig({ startup_playback: 'once', frame_count: 1 }));
+  assert.equal(activeFrameIndex(card), 0);
+  assert.equal(card._playing, false);
+  assert.equal(card.shadowRoot.getElementById('play-btn').getAttribute('aria-label'), 'Play animation');
+  assert.ok(!harness.scheduler.activeTimeoutDelays().some(delay => delay === 500 || delay === 1500));
+  setConnected(card, false);
+});
+
+for (const interrupt of ['pause', 'scrub']) {
+  test(`${interrupt} cancels the startup sequence and subsequent Play loops normally`, async () => {
+    const harness = createHarness();
+    const card = await initializeCard(harness, issueConfig({ startup_playback: 'once', frame_count: 3 }));
+    harness.scheduler.runNextTimeout(500);
+    const button = card.shadowRoot.getElementById('play-btn');
+    if (interrupt === 'pause') button.click();
+    else timeline(card).children[1].click();
+    assert.equal(card._playing, false);
+    assert.equal(activeFrameIndex(card), 1);
+    button.click();
+    harness.scheduler.runNextTimeout(500);
+    assert.equal(activeFrameIndex(card), 2);
+    assert.equal(card._playing, true);
+    harness.scheduler.runNextTimeout(1500);
+    assert.equal(activeFrameIndex(card), 0);
+    setConnected(card, false);
+  });
+}
+
+for (const transition of ['refresh', 'reconnect', 'basemap', 'setConfig']) {
+  test(`play-once progress survives ${transition} without skipping unseen frames`, async () => {
+    const harness = createHarness();
+    const config = issueConfig({ startup_playback: 'once', frame_count: 4, basemap_style: 'auto', dark_basemap: false });
+    const card = await initializeCard(harness, config);
+    harness.scheduler.runNextTimeout(500);
+    assert.equal(activeFrameIndex(card), 1);
+    if (transition === 'refresh') await card._refreshData();
+    else {
+      const oldMap = card._map;
+      if (transition === 'reconnect') {
+        setConnected(card, false);
+        setConnected(card, true);
+      } else if (transition === 'basemap') {
+        card.hass = issueHass({ 'sun.sun': { state: 'below_horizon', attributes: {} } });
+      } else card.setConfig({ ...config, map_height: 500 });
+      await flushUntil(() => card._map && card._map !== oldMap && card._radarLayers.length === 4);
+    }
+    assert.equal(activeFrameIndex(card), 1);
+    assert.equal(card._playing, true);
+    harness.scheduler.runNextTimeout(500);
+    assert.equal(activeFrameIndex(card), 2);
+    harness.scheduler.runNextTimeout(500);
+    assert.equal(activeFrameIndex(card), 3);
+    assert.equal(card._playing, false);
+    setConnected(card, false);
+  });
+}
+
+test('manual pause survives same-element reconnect and automatic basemap changes', async () => {
+  const harness = createHarness();
+  const card = await initializeCard(harness, issueConfig({ basemap_style: 'auto', dark_basemap: false, frame_count: 3 }));
+  card.shadowRoot.getElementById('play-btn').click();
+  setConnected(card, false);
+  setConnected(card, true);
+  await flushUntil(() => card._radarLayers.length === 3);
+  assert.equal(card._playing, false);
+  const oldMap = card._map;
+  card.hass = issueHass({ 'sun.sun': { state: 'below_horizon', attributes: {} } });
+  await flushUntil(() => card._map && card._map !== oldMap && card._radarLayers.length === 3);
+  assert.equal(card._playing, false);
+  assert.equal(card.shadowRoot.getElementById('play-btn').getAttribute('aria-label'), 'Play animation');
+  assert.ok(!harness.scheduler.activeTimeoutDelays().includes(500));
+  setConnected(card, false);
+});
+
+test('changing the startup preference applies it immediately to the configured card', async () => {
+  const harness = createHarness();
+  const config = issueConfig({ frame_count: 3 });
+  const card = await initializeCard(harness, config);
+  for (const [startup_playback, expectedPlaying, expectedFrame] of [
+    ['paused', false, 2], ['once', true, 0], ['loop', true, 2],
+  ]) {
+    const oldMap = card._map;
+    card.setConfig({ ...config, startup_playback });
+    await flushUntil(() => card._map && card._map !== oldMap && card._radarLayers.length === 3);
+    assert.equal(card._playing, expectedPlaying);
+    assert.equal(activeFrameIndex(card), expectedFrame);
+  }
+  setConnected(card, false);
+});
+
+test('manual Play during a delayed paused refresh leaves exactly one working animation timer', async () => {
+  const harness = createHarness();
+  const card = await initializeCard(harness, issueConfig({ startup_playback: 'paused', frame_count: 3 }));
+  const loadRadar = card._loadRadarData.bind(card);
+  let release;
+  const gate = new Promise(resolve => { release = resolve; });
+  card._loadRadarData = async (...args) => {
+    await gate;
+    return loadRadar(...args);
+  };
+  const refresh = card._refreshData();
+  card.shadowRoot.getElementById('play-btn').click();
+  release();
+  await refresh;
+  assert.equal(card._playing, true);
+  assert.equal(harness.scheduler.activeTimeoutDelays().filter(delay => delay === 500).length, 1);
+  harness.scheduler.runNextTimeout(500);
+  assert.equal(activeFrameIndex(card), 0);
+  setConnected(card, false);
+});
+
+test('editor round-trips startup playback and omits the default from saved YAML', () => {
+  const harness = createHarness();
+  const editor = new harness.Editor();
+  editor.hass = issueHass();
+  editor.setConfig(issueConfig({ startup_playback: 'invalid' }));
+  assert.equal(editor.shadowRoot.getElementById('startup_playback').value, 'loop');
+  assert.match(editor.shadowRoot.innerHTML, /When the card opens/);
+  let config;
+  editor.addEventListener('config-changed', event => { config = event.detail.config; });
+  for (const preference of ['once', 'paused', 'loop']) {
+    const select = editor.shadowRoot.getElementById('startup_playback');
+    select.value = preference;
+    select.dispatchEvent({ type: 'change', target: select });
+    assert.equal(config.startup_playback, preference === 'loop' ? undefined : preference);
+    assert.equal(Object.hasOwn(config, 'startup_playback'), preference !== 'loop');
+    assert.equal(config.frame_delay, 500);
+    assert.equal(config.restart_delay, 1500);
+    assert.equal(config.frame_count, 9);
+    editor.setConfig(config);
+    assert.equal(editor.shadowRoot.getElementById('startup_playback').value, preference);
+  }
 });
 
 test('applies restart_delay after displaying the final animation frame', async () => {

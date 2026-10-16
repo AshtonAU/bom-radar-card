@@ -61,6 +61,12 @@ const MAX_OVERZOOM_DISPLAY_ZOOM = 10;
 const MAX_MAP_HEIGHT = 4096;
 const MAX_TIMEOUT_DELAY_MS = 2147483647;
 const BASEMAP_STYLE_AUTO = 'auto';
+const STARTUP_PLAYBACK_OPTIONS = [
+  ['loop', 'Play continuously'],
+  ['once', 'Play once'],
+  ['paused', 'Start paused'],
+];
+const normalizeStartupPlayback = (value) => STARTUP_PLAYBACK_OPTIONS.some(([mode]) => mode === value) ? value : 'loop';
 const SUN_ENTITY_ID = 'sun.sun';
 
 const HALF_EXTENT = 20037508.342789244;
@@ -1203,6 +1209,8 @@ class BomRadarCard extends HTMLElement {
     this._committedRadarLayerKey = null;
     this._currentFrame = 0;
     this._playing = true;
+    this._playOnce = false;
+    this._resumeFrame = null;
     this._animationTimer = null;
     this._timestamps = [];
     this._initialized = false;
@@ -1271,6 +1279,8 @@ class BomRadarCard extends HTMLElement {
 
   setConfig(config) {
     if (!config) throw new Error('Invalid configuration');
+    const startupPlayback = normalizeStartupPlayback(config.startup_playback);
+    const resetPlayback = !this._hasConfig() || startupPlayback !== this._config.startup_playback;
     const basemapProvider = getBasemapProvider(config);
     const darkBasemap = config.dark_basemap !== false;
     const basemapStyle = getConfiguredBasemapStyle(config, basemapProvider);
@@ -1285,6 +1295,7 @@ class BomRadarCard extends HTMLElement {
       frame_count: clampInteger(config.frame_count, 9, 1, 9),
       frame_delay: clampPositiveInteger(config.frame_delay, 500, 100, MAX_TIMEOUT_DELAY_MS),
       restart_delay: clampPositiveInteger(config.restart_delay, 1500, 500, MAX_TIMEOUT_DELAY_MS),
+      startup_playback: startupPlayback,
       layer: activeLayer,
       enabled_layers: enabledLayers,
       show_marker: config.show_marker !== false,
@@ -1327,9 +1338,10 @@ class BomRadarCard extends HTMLElement {
     };
     syncUiTheme(this, this._hass, undefined, this._config.ui_theme);
     if (this._initialized || this._map) {
-      this._restart();
+      this._restart({ resetPlayback });
       return;
     }
+    if (resetPlayback) this._resetStartupPlayback();
     this._initIfReady();
   }
 
@@ -1356,10 +1368,16 @@ class BomRadarCard extends HTMLElement {
     return true;
   }
 
-  _restart() {
+  _resetStartupPlayback() {
+    this._playing = this._config.startup_playback !== 'paused';
+    this._playOnce = this._config.startup_playback === 'once';
+    this._resumeFrame = null;
+  }
+
+  _restart({ resetPlayback = false } = {}) {
     this._initToken += 1;
     this._cleanupMap();
-    this._playing = true;
+    if (resetPlayback) this._resetStartupPlayback();
     this._currentFrame = 0;
     this._initialized = false;
     this._initIfReady();
@@ -1402,7 +1420,7 @@ class BomRadarCard extends HTMLElement {
           </div>
           ${this._config.show_playback ? `
           <div class="controls">
-            <button class="play-btn" id="play-btn" type="button" aria-label="Pause animation">${ICON_PAUSE}</button>
+            <button class="play-btn" id="play-btn" type="button" aria-label="${this._playing ? 'Pause animation' : 'Play animation'}">${this._playing ? ICON_PAUSE : ICON_PLAY}</button>
             <div class="timeline" id="timeline"></div>
             <span class="time-label" id="time-label">--:--</span>
           </div>` : ''}
@@ -2189,8 +2207,16 @@ class BomRadarCard extends HTMLElement {
       return false;
     }
 
-    const initialFrame = layerConfig.initialFrame === 'first' ? 0 : timestamps.length - 1;
+    let initialFrame = this._playOnce || layerConfig.initialFrame === 'first' ? 0 : timestamps.length - 1;
+    // Rebuilds retain the current frame. A one-shot refresh also retains its
+    // progress instead of jumping straight to the newest observation.
+    const resume = this._resumeFrame || (this._playOnce ? this._getPlaybackFrame() : null);
+    if (resume?.layer === layerKey) {
+      const matchedFrame = timestamps.indexOf(resume.timestamp);
+      initialFrame = matchedFrame >= 0 ? matchedFrame : Math.min(resume.index, timestamps.length - 1);
+    }
     this._replaceRadarLayers(L, layerConfig, timestamps, initialFrame, layerKey);
+    this._resumeFrame = null;
     this._syncRadarCoverageLayer(L);
     this._renderTopOverlays();
     this._syncLayerSwitcherState();
@@ -2270,7 +2296,6 @@ class BomRadarCard extends HTMLElement {
       console.warn('BOM Radar Card: Refresh failed', err);
     } finally {
       if (
-        wasPlaying &&
         this._playing &&
         this._isCurrentInit(refreshToken) &&
         this._radarLoadToken === radarLoadToken &&
@@ -2287,9 +2312,9 @@ class BomRadarCard extends HTMLElement {
     const playBtn = this.shadowRoot.getElementById('play-btn');
     if (playBtn) {
       playBtn.addEventListener('click', () => {
+        this._playOnce = false;
         this._playing = !this._playing;
-        playBtn.innerHTML = this._playing ? ICON_PAUSE : ICON_PLAY;
-        playBtn.setAttribute('aria-label', this._playing ? 'Pause animation' : 'Play animation');
+        this._syncPlaybackButton();
         if (this._playing) {
           this._startAnimation();
         } else {
@@ -2297,7 +2322,24 @@ class BomRadarCard extends HTMLElement {
         }
       });
     }
+    this._syncPlaybackButton();
     this._buildTimeline();
+  }
+
+  _syncPlaybackButton() {
+    const playBtn = this.shadowRoot.getElementById('play-btn');
+    if (!playBtn) return;
+    playBtn.innerHTML = this._playing ? ICON_PAUSE : ICON_PLAY;
+    playBtn.setAttribute('aria-label', this._playing ? 'Pause animation' : 'Play animation');
+  }
+
+  _getPlaybackFrame() {
+    if (!this._timestamps.length) return null;
+    return {
+      layer: this._committedRadarLayerKey,
+      timestamp: this._timestamps[this._currentFrame],
+      index: this._currentFrame,
+    };
   }
 
   _buildTimeline() {
@@ -2316,11 +2358,8 @@ class BomRadarCard extends HTMLElement {
         this._stopAnimation();
         this._showFrame(i);
         this._playing = false;
-        const playBtn = this.shadowRoot.getElementById('play-btn');
-        if (playBtn) {
-          playBtn.innerHTML = ICON_PLAY;
-          playBtn.setAttribute('aria-label', 'Play animation');
-        }
+        this._playOnce = false;
+        this._syncPlaybackButton();
       });
       timeline.appendChild(dot);
     }
@@ -2356,9 +2395,18 @@ class BomRadarCard extends HTMLElement {
   }
 
   _startAnimation() {
-    if (!this._timestamps.length || !this._radarLayers.length) return;
+    if (!this._playing || !this._timestamps.length || !this._radarLayers.length) return;
 
     this._stopAnimation();
+    const finishOnce = () => {
+      if (!this._playOnce || this._currentFrame < this._timestamps.length - 1) return false;
+      this._playing = false;
+      this._playOnce = false;
+      this._animationTimer = null;
+      this._syncPlaybackButton();
+      return true;
+    };
+    if (finishOnce()) return;
     const advance = () => {
       let nextFrame = this._currentFrame + 1;
       let delay = this._config.frame_delay;
@@ -2371,6 +2419,7 @@ class BomRadarCard extends HTMLElement {
       }
 
       this._showFrame(nextFrame);
+      if (finishOnce()) return;
       this._animationTimer = setTimeout(advance, delay);
     };
 
@@ -2385,6 +2434,7 @@ class BomRadarCard extends HTMLElement {
   }
 
   _cleanupMap() {
+    this._resumeFrame = this._getPlaybackFrame() || this._resumeFrame;
     this._autoHideControls?.destroy();
     this._autoHideControls = null;
     this._radarLoadToken += 1;
@@ -2674,8 +2724,17 @@ class BomRadarCardEditor extends HTMLElement {
         </details>
 
         <details class="section" data-section="playback" ${this._openSections.has('playback') ? 'open' : ''}>
-          <summary><span><span class="section-title">Playback</span><span class="section-description">Animation speed and frame count</span></span></summary>
+          <summary><span><span class="section-title">Playback</span><span class="section-description">Startup, animation speed and frame count</span></span></summary>
           <div class="section-content">
+          <div class="row">
+            <label for="startup_playback">When the card opens</label>
+            <select id="startup_playback" aria-describedby="startup-playback-help">
+              ${STARTUP_PLAYBACK_OPTIONS.map(([value, label]) =>
+                `<option value="${value}" ${normalizeStartupPlayback(cfg.startup_playback) === value ? 'selected' : ''}>${label}</option>`
+              ).join('')}
+            </select>
+            <div class="help-text" id="startup-playback-help">Play once pauses on the final frame. Start paused shows the latest observation or first forecast frame. Data still refreshes while paused; pressing Play starts continuous playback.</div>
+          </div>
           <div class="row">
             <label for="frame_count">Frames per loop</label>
             <input type="number" id="frame_count" min="1" max="9" value="${escapeHtml(cfg.frame_count || 9)}">
@@ -2806,7 +2865,7 @@ class BomRadarCardEditor extends HTMLElement {
 
     // Bind events
     const fields = [
-      'layer', 'basemap_provider', 'basemap_style', 'basemap_api_key', 'ui_theme',
+      'layer', 'basemap_provider', 'basemap_style', 'basemap_api_key', 'ui_theme', 'startup_playback',
       'zoom_level', 'map_height', 'center_latitude', 'center_longitude',
       'frame_delay', 'restart_delay', 'radar_opacity', 'chrome_opacity', 'frame_count',
       'marker_latitude', 'marker_longitude', 'accent_color', 'location_color',
@@ -2940,6 +2999,10 @@ class BomRadarCardEditor extends HTMLElement {
     const uiTheme = normalizeUiTheme(get('ui_theme')?.value);
     if (uiTheme === 'auto') delete config.ui_theme;
     else config.ui_theme = uiTheme;
+
+    const startupPlayback = normalizeStartupPlayback(get('startup_playback')?.value);
+    if (startupPlayback === 'loop') delete config.startup_playback;
+    else config.startup_playback = startupPlayback;
 
     const useCustomAccent = get('use_custom_accent_color');
     if (useCustomAccent?.checked) {
