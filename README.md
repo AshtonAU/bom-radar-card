@@ -24,6 +24,7 @@ BOM Radar Card is a modern replacement for older Home Assistant radar cards that
 - Native BOM weather tiles from `api.bom.gov.au`
 - 34 observed and forecast layers covering rain, wind, waves, temperature, humidity, UV, and significant weather
 - Pan, zoom, playback, timeline scrubbing, recentering, and five-minute refreshes
+- Optional radar-site centring and distance rings, with no additional data requests
 - Responsive layer switcher and exact colour keys for all 31 colour-bearing weather layers
 - Dashboard-themed controls and settings, with an optional map-only idle view
 - BOM-native automatic day/night basemap by default
@@ -117,6 +118,8 @@ not need conversion.
 | `enabled_layers` | list | all layers | Limit the available layers. If `layer` is omitted or excluded, the first enabled layer becomes active. |
 | `center_latitude` | number | HA latitude | Map center latitude. |
 | `center_longitude` | number | HA longitude | Map center longitude. |
+| `radar_station` | string or number | none | BOM radar ID to use as the starting and recenter location. Choose a site under **Map → Centre on a radar**. Takes precedence over custom centre coordinates; the home marker stays independent. |
+| `show_range_rings` | boolean | `false` | Distance rings around the selected `radar_station`, visible at zoom 6 and above on rain rate, reflectivity and estimated rain 1 hr. |
 | `zoom_level` | number | `7` | Display zoom from 3–8, or 3–10 with `allow_overzoom`. |
 | `map_height` | number | `300` | Map height in pixels. YAML values are capped at 4096 px. |
 | `allow_overzoom` | boolean | `false` | Scale BOM's native z8 radar tiles up to display zoom 10. |
@@ -148,7 +151,7 @@ not need conversion.
 | `marker_longitude` | number | HA longitude | Override the marker longitude without changing the map center. Falls back to the configured center, then Sydney, when HA has no location. |
 | `show_zoom` | boolean | `true` | Show Leaflet zoom controls. |
 | `lock_map` | boolean | `false` | Lock the starting centre and let swipes scroll the dashboard. Disables dragging, pinch, wheel, double-click, box and keyboard map gestures; zoom buttons, playback and layers still work. Set under **Map → Lock map position**. |
-| `show_recenter` | boolean | `true` | Show the button that recenters on the marker location, or the starting centre when `lock_map` is enabled. |
+| `show_recenter` | boolean | `true` | Show the button that recenters on the selected radar, otherwise the marker location or the starting centre when `lock_map` is enabled. |
 | `show_layer_switcher` | boolean | `true` | Show the in-card layer switcher. |
 | `show_playback` | boolean | `true` | Show playback and timeline controls. |
 | `show_legend` | boolean | `true` | Show the rain-rate/reflectivity legend when applicable. |
@@ -186,6 +189,28 @@ See the integration's [configuration guidance](https://github.com/mrk-its/homeas
 Unknown YAML keys are ignored so migrated dashboards continue loading. Use `radar_opacity` for the BOM overlay; keys from other radar cards such as `overlay_transparency` and `show_scale` are not supported.
 
 ## Common recipes
+
+**Centre on a radar with distance rings**
+
+```yaml
+type: custom:bom-radar-card
+radar_station: "71" # Sydney (Terrey Hills)
+zoom_level: 8
+show_range_rings: true
+```
+
+Choose from 64 radar sites in the visual editor. Selecting a site centres the
+national radar mosaic there; it does not isolate observations from that radar.
+Saved custom coordinates are retained and used again when you choose **Home or
+custom coordinates**. Your home marker remains at its separately configured location.
+
+Rings adapt to zoom: 200 km at zoom 6; 100/200 km at 7; 50/100 km at 8;
+20/40/60 km at 9; and 10/20/30 km at 10. They are distance guides, not coverage
+boundaries or an indication that the radar is operating. They disappear on other
+weather layers and below zoom 6. Zoom levels 9–10 require `allow_overzoom`.
+
+The station catalogue is bundled from BOM's [public radar-site layer](https://api.bom.gov.au/apikey/v1/mapping/overlays/radar_sites/FeatureServer/0)
+(retrieved 23 October 2026), so these options add no runtime API calls.
 
 **Play once when opening the dashboard**
 

@@ -7,6 +7,7 @@ import { rollup } from 'rollup';
 
 import { BOM_LAYERS } from '../src/bom-layers.js';
 import { bundleUiFont } from '../scripts/bundle-ui-font.mjs';
+import { getRadarStation } from '../src/radar-stations.js';
 
 const LEAFLET_TEST_MODULE_ID = '\0bom-radar-card-leaflet-test-double';
 
@@ -32,6 +33,7 @@ async function buildLifecycleBundle() {
           export const layerGroup = (...args) => leaflet.layerGroup(...args);
           export const canvas = (...args) => leaflet.canvas(...args);
           export const circleMarker = (...args) => leaflet.circleMarker(...args);
+          export const circle = (...args) => leaflet.circle(...args);
           export const control = (...args) => leaflet.control(...args);
           control.zoom = (...args) => leaflet.control.zoom(...args);
         `;
@@ -501,6 +503,9 @@ function createLeafletDouble(document, renderControlContainers = false) {
     maps: [],
     tileLayerCalls: [],
     tileLayerThrows: false,
+    circles: [],
+    markers: [],
+    layerGroups: [],
   };
 
   class FakeMap {
@@ -536,6 +541,12 @@ function createLeafletDouble(document, renderControlContainers = false) {
       return this.options.zoom;
     }
 
+    setZoom(zoom) {
+      this.options.zoom = zoom;
+      for (const listener of this.events.zoomend || []) listener({ target: this });
+      return this;
+    }
+
     getPane(name) {
       return this.panes[name] || null;
     }
@@ -560,6 +571,7 @@ function createLeafletDouble(document, renderControlContainers = false) {
 
     removeLayer(layer) {
       this.layers = this.layers.filter((candidate) => candidate !== layer);
+      if (layer) layer._map = null;
       return this;
     }
 
@@ -638,37 +650,62 @@ function createLeafletDouble(document, renderControlContainers = false) {
       },
     },
     control,
-    marker() {
+    marker(latlng, options = {}) {
       const marker = {
+        latlng,
+        options,
         addTo(map) {
-          map.layers.push(marker);
+          if (typeof map.addLayer === 'function') map.addLayer(marker);
+          else map.layers.push(marker);
+          marker._map = map;
           return marker;
         },
       };
+      state.markers.push(marker);
       return marker;
     },
     divIcon(options) {
       return options;
     },
-    layerGroup() {
-      const layers = [];
+    layerGroup(layers = []) {
+      const members = [...layers];
       const group = {
+        layers: members,
         addTo(map) {
           group._map = map;
           map.layers.push(group);
           return group;
         },
         addLayer(layer) {
-          layers.push(layer);
+          members.push(layer);
           return group;
         },
         removeLayer(layer) {
-          const index = layers.indexOf(layer);
-          if (index !== -1) layers.splice(index, 1);
+          const index = members.indexOf(layer);
+          if (index !== -1) members.splice(index, 1);
           return group;
         },
       };
+      group.remove = () => {
+        if (group._map) group._map.removeLayer(group);
+        group._map = null;
+        return group;
+      };
+      state.layerGroups.push(group);
       return group;
+    },
+    circle(latlng, options = {}) {
+      const circle = {
+        latlng,
+        options,
+        addTo(group) {
+          group.addLayer(circle);
+          circle._map = group;
+          return circle;
+        },
+      };
+      state.circles.push(circle);
+      return circle;
     },
     canvas() {
       return { _ctx: {}, _redraw() {} };
@@ -3405,6 +3442,96 @@ test('locked recenter preserves custom starting centre and playback and layer co
   card._layerSwitcher.button.click();
   assert.equal(card._layerSwitcher.panel.classList.contains('is-open'), true);
   setConnected(card, false);
+});
+
+test('selected radar centres the map and recenter control while keeping the home marker independent', async () => {
+  const harness = createHarness({ renderControlContainers: true });
+  const station = getRadarStation('4');
+  const card = await initializeCard(harness, issueConfig({
+    radar_station: 4, center_latitude: -31, center_longitude: 151,
+    show_marker: true, show_recenter: true,
+  }));
+  assert.deepEqual(Array.from(card._map.options.center), [station.latitude, station.longitude]);
+  const homeMarker = harness.leafletState.markers.find(marker => marker.options?.title === undefined);
+  assert.ok(homeMarker, 'Home Assistant home marker remains present');
+  assert.deepEqual(Array.from(homeMarker.latlng), [-27.55, 153.08]);
+  const recenter = card.shadowRoot.querySelector('.bom-recenter-button');
+  assert.equal(recenter.getAttribute('aria-label'), `Recenter to ${station.name}`);
+  let destination;
+  card._map.panTo = center => { destination = Array.from(center); };
+  recenter.click();
+  assert.deepEqual(destination, [station.latitude, station.longitude]);
+  setConnected(card, false);
+});
+
+test('range rings follow zoom and committed layer, replacing old groups and cleaning up', async () => {
+  const harness = createHarness();
+  const card = await initializeCard(harness, issueConfig({
+    radar_station: '4', show_range_rings: true, layer: 'reflectivity',
+  }));
+  assert.equal(card._radarRangeLayer.layers.filter(layer => layer.options.radius).length, 2);
+  assert.deepEqual(card._radarRangeLayer.layers.filter(layer => layer.options.radius).map(layer => layer.options.radius), [200000, 100000]);
+  const oldGroup = card._radarRangeLayer;
+  card._map.setZoom(9);
+  assert.equal(card._radarRangeLayer.layers.filter(layer => layer.options.radius).length, 3);
+  assert.deepEqual(card._radarRangeLayer.layers.filter(layer => layer.options.radius).map(layer => layer.options.radius), [60000, 40000, 20000]);
+  assert.equal(card._map.hasLayer(oldGroup), false);
+  assert.ok(card._radarRangeLayer.layers.filter(layer => layer.options.icon).some(layer => layer.options.icon.html === '60 km'));
+
+  const refresh = card._refreshData;
+  card._refreshData = async () => { throw new Error('simulated failed layer refresh'); };
+  await card._setLayer('air_temperature');
+  card._refreshData = refresh;
+  assert.equal(card._config.layer, 'reflectivity');
+  assert.ok(card._radarRangeLayer, 'rings return after a failed switch to a non-radar layer');
+
+  setConnected(card, false);
+  assert.equal(card._radarRangeLayer, null);
+});
+
+test('range rings default off, require a station, and disappear below zoom six', async () => {
+  const harness = createHarness();
+  const defaultCard = await initializeCard(harness, issueConfig({ radar_station: '4' }));
+  assert.equal(defaultCard._config.show_range_rings, false);
+  assert.equal(defaultCard._radarRangeLayer, null);
+  setConnected(defaultCard, false);
+
+  const noStation = await initializeCard(harness, issueConfig({ show_range_rings: true }));
+  assert.equal(noStation._radarRangeLayer, null);
+  setConnected(noStation, false);
+
+  const tooLow = await initializeCard(harness, issueConfig({ radar_station: '4', show_range_rings: true, zoom_level: 5 }));
+  assert.equal(tooLow._radarRangeLayer, null);
+  setConnected(tooLow, false);
+});
+
+test('unknown explicit radar ids fail clearly before map initialization', () => {
+  const harness = createHarness();
+  const card = new harness.Card();
+  assert.throws(() => card.setConfig(issueConfig({ radar_station: 'unknown' })), /Unknown radar_station.*valid BOM radar ID/);
+  assert.equal(harness.leafletState.maps.length, 0);
+});
+
+test('editor preserves custom centre when switching away from a selected radar', () => {
+  const harness = createHarness();
+  const editor = new harness.Editor();
+  const emitted = [];
+  editor.addEventListener('config-changed', event => emitted.push(event.detail.config));
+  editor.setConfig(issueConfig({ radar_station: '4', center_latitude: -31.5, center_longitude: 150.5, show_range_rings: true }));
+  const radar = editor.shadowRoot.getElementById('radar_station');
+  const rings = editor.shadowRoot.getElementById('show_range_rings');
+  assert.equal(radar.value, '4');
+  assert.equal(rings.checked, true);
+  radar.value = '';
+  radar.dispatchEvent({ type: 'change', target: radar });
+  const config = emitted.at(-1);
+  assert.equal(Object.hasOwn(config, 'radar_station'), false);
+  assert.equal(config.center_latitude, -31.5);
+  assert.equal(config.center_longitude, 150.5);
+  editor.setConfig(config);
+  assert.equal(editor.shadowRoot.getElementById('radar_station').value, '');
+  assert.equal(editor.shadowRoot.getElementById('center_latitude').value, '-31.5');
+  assert.equal(editor.shadowRoot.getElementById('center_longitude').value, '150.5');
 });
 
 test('editor saves lock_map independently of recenter visibility and round-trips both states', () => {

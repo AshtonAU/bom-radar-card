@@ -27,6 +27,7 @@ import {
   shouldShowRadarCoverage,
   supportsRadarCoverageLayer,
 } from './radar-coverage.js';
+import { RADAR_STATIONS, getRadarStation, getRangeRingDistances, getRangeRingLabelPosition, supportsRadarRangeRings } from './radar-stations.js';
 import { replaceShadowContentPreservingCardMod } from './shadow-content.js';
 import {
   createImageAvailabilityProbe,
@@ -72,6 +73,7 @@ const SUN_ENTITY_ID = 'sun.sun';
 const HALF_EXTENT = 20037508.342789244;
 const WORLD_EXTENT = HALF_EXTENT * 2;
 const MAX_BOM_MAPSERVER_NATIVE_ZOOM = 10;
+const RADAR_RANGE_PANE = 'bomRadarRangePane';
 const RADAR_COVERAGE_PANE = 'bomRadarCoveragePane';
 const RADAR_COVERAGE_PANE_Z_INDEX = 350;
 const BOM_REFERENCE_OVERLAY_BASE_URL = 'https://api.bom.gov.au/apikey/v1/mapping/overlays';
@@ -536,6 +538,11 @@ const LEAFLET_CSS = `
 .leaflet-control-attribution{background:var(--bom-panel-background)!important;color:var(--bom-muted);font-size:10px;padding:2px 6px;border-radius:var(--bom-attribution-radius);line-height:1.4}
 .leaflet-control-attribution a{color:var(--bom-text);text-decoration:underline;text-underline-offset:2px}
 .leaflet-touch .leaflet-control-zoom a{font-size:18px}
+.bom-range-ring{filter:drop-shadow(0 1px 1px #0008)}
+.bom-range-label{color:var(--bom-text);background:var(--bom-surface);border-radius:3px;font:11px/20px var(--bom-font-family);text-align:center;white-space:nowrap;pointer-events:none}
+.bom-radar-station{pointer-events:none}
+.bom-radar-station::before{content:'';position:absolute;left:2px;top:2px;width:8px;height:8px;border:2px solid #fff;border-radius:50%;background:#374151;box-shadow:0 0 2px #000}
+.bom-radar-station span{position:absolute;left:18px;top:-4px;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:2px 5px;border-radius:3px;color:var(--bom-text);background:var(--bom-surface);font:11px/18px var(--bom-font-family)}
 .bom-recenter-control{border:none}
 .bom-recenter-button{appearance:none;-webkit-appearance:none;background:transparent;color:var(--bom-text);width:var(--bom-control-size);height:var(--bom-control-size);padding:0;display:flex;align-items:center;justify-content:center;border:none;border-radius:var(--bom-control-radius);cursor:pointer;transition:background 0.15s,color 0.15s,opacity 0.15s}
 .bom-recenter-button svg{width:16px;height:16px}
@@ -1226,6 +1233,7 @@ class BomRadarCard extends HTMLElement {
     this._legendKeydownHandler = null;
     this._bomReferenceLayers = [];
     this._radarCoverageLayer = null;
+    this._radarRangeLayer = null;
     this._labelLayer = null;
     this._lastRadarDisplayZoom = null;
     this._pendingZoomRebuild = false;
@@ -1259,6 +1267,14 @@ class BomRadarCard extends HTMLElement {
     return this._config?.map_height || 300;
   }
 
+  _getMapCenter() {
+    const station = getRadarStation(this._config.radar_station);
+    return station ? [station.latitude, station.longitude] : [
+      this._config.center_latitude ?? this._hass?.config?.latitude ?? -33.87,
+      this._config.center_longitude ?? this._hass?.config?.longitude ?? 151.21,
+    ];
+  }
+
   _getHomeCoordinates() {
     const lat = this._config.marker_latitude ?? this._hass?.config?.latitude ?? this._config.center_latitude ?? -33.87;
     const lon = this._config.marker_longitude ?? this._hass?.config?.longitude ?? this._config.center_longitude ?? 151.21;
@@ -1279,6 +1295,10 @@ class BomRadarCard extends HTMLElement {
 
   setConfig(config) {
     if (!config) throw new Error('Invalid configuration');
+    const station = getRadarStation(config.radar_station);
+    if (config.radar_station != null && config.radar_station !== '' && !station) {
+      throw new Error('Unknown radar_station. Choose a radar in the visual editor or use a valid BOM radar ID.');
+    }
     const startupPlayback = normalizeStartupPlayback(config.startup_playback);
     const resetPlayback = !this._hasConfig() || startupPlayback !== this._config.startup_playback;
     const basemapProvider = getBasemapProvider(config);
@@ -1289,6 +1309,8 @@ class BomRadarCard extends HTMLElement {
     const allowOverzoom = config.allow_overzoom === true;
     const maxDisplayZoom = getConfiguredMaxDisplayZoom({ allow_overzoom: allowOverzoom });
     this._config = {
+      radar_station: station?.id ?? null,
+      show_range_rings: config.show_range_rings === true,
       center_latitude: parseOptionalFiniteNumber(config.center_latitude),
       center_longitude: parseOptionalFiniteNumber(config.center_longitude),
       zoom_level: clampNumber(config.zoom_level, 7, MIN_MAP_ZOOM, maxDisplayZoom),
@@ -1463,8 +1485,7 @@ class BomRadarCard extends HTMLElement {
     const container = this.shadowRoot.getElementById('map');
     if (!container) return;
 
-    const lat = this._config.center_latitude ?? this._hass?.config?.latitude ?? -33.87;
-    const lon = this._config.center_longitude ?? this._hass?.config?.longitude ?? 151.21;
+    const [lat, lon] = this._getMapCenter();
     const basemapConfig = getBasemapConfig(this._config, this._hass);
     this._resolvedBasemapStyle = basemapConfig.style;
 
@@ -1583,6 +1604,7 @@ class BomRadarCard extends HTMLElement {
       this._autoHideControls?.release('zoom');
       const nextZoom = this._map?.getZoom();
       const previousZoom = this._previousDisplayZoom ?? nextZoom;
+      this._syncRadarRangeRings();
 
       try {
         if (this._shouldRebuildRadarOnZoom(previousZoom, nextZoom)) {
@@ -1725,6 +1747,45 @@ class BomRadarCard extends HTMLElement {
     }
   }
 
+  _syncRadarRangeRings(L = this._L) {
+    if (!this._map || !L) return;
+    if (this._radarRangeLayer) {
+      this._map.removeLayer(this._radarRangeLayer);
+      this._radarRangeLayer = null;
+    }
+    const station = getRadarStation(this._config.radar_station);
+    const distances = getRangeRingDistances(this._map.getZoom());
+    if (!station || !this._config.show_range_rings || !distances.length ||
+        !supportsRadarRangeRings(this._getDisplayedRadarLayerKey())) return;
+
+    // A dedicated pane keeps distance guides above reference tiles but below
+    // the home/lightning markers. They never intercept map gestures.
+    const pane = this._map.getPane(RADAR_RANGE_PANE) || this._map.createPane(RADAR_RANGE_PANE);
+    pane.style.zIndex = '450';
+    pane.style.pointerEvents = 'none';
+    const group = L.layerGroup();
+    const center = [station.latitude, station.longitude];
+    const color = isDarkBasemapStyle(this._config.basemap_provider, this._resolvedBasemapStyle) ? '#e2e8f0' : '#475569';
+    for (const km of distances) {
+      L.circle(center, {
+        radius: km * 1000, pane: RADAR_RANGE_PANE, className: 'bom-range-ring',
+        color, weight: 1, opacity: 0.8, fill: false, interactive: false,
+      }).addTo(group);
+      L.marker(getRangeRingLabelPosition(station, km), {
+        pane: RADAR_RANGE_PANE, interactive: false, keyboard: false,
+        icon: L.divIcon({ className: 'bom-range-label', html: `${km} km`, iconSize: [52, 20], iconAnchor: [26, 10] }),
+      }).addTo(group);
+    }
+    L.marker(center, {
+      pane: RADAR_RANGE_PANE, interactive: false, keyboard: false,
+      icon: L.divIcon({
+        className: 'bom-radar-station', html: `<span>${escapeHtml(station.name)}</span>`,
+        iconSize: [12, 12], iconAnchor: [6, 6],
+      }),
+    }).addTo(group);
+    this._radarRangeLayer = group.addTo(this._map);
+  }
+
   _syncReferenceLayerOrder() {
     this._bomReferenceLayers.forEach((layer) => {
       if (this._map?.hasLayer(layer)) {
@@ -1743,13 +1804,15 @@ class BomRadarCard extends HTMLElement {
       const button = L.DomUtil.create('button', 'bom-recenter-button', container);
       button.type = 'button';
       button.innerHTML = ICON_RECENTER;
-      button.title = this._config.lock_map ? 'Recenter to starting location' : 'Recenter to home location';
+      const station = getRadarStation(this._config.radar_station);
+      button.title = station ? `Recenter to ${station.name}`
+        : this._config.lock_map ? 'Recenter to starting location' : 'Recenter to home location';
       button.setAttribute('aria-label', button.title);
 
       L.DomEvent.disableClickPropagation(container);
       L.DomEvent.disableScrollPropagation(container);
       L.DomEvent.on(button, 'click', () => {
-        const center = this._config.lock_map
+        const center = station ? this._getMapCenter() : this._config.lock_map
           ? this._map?.options.center : this._getHomeCoordinates();
         if (center) this._map?.panTo(center, { animate: true });
       });
@@ -2181,6 +2244,7 @@ class BomRadarCard extends HTMLElement {
         this._renderTopOverlays();
         this._syncLayerSwitcherState();
         this._syncRadarCoverageLayer();
+        this._syncRadarRangeRings();
         this._buildTimeline();
         this._updateTimeLabel();
       }
@@ -2218,6 +2282,7 @@ class BomRadarCard extends HTMLElement {
     this._replaceRadarLayers(L, layerConfig, timestamps, initialFrame, layerKey);
     this._resumeFrame = null;
     this._syncRadarCoverageLayer(L);
+    this._syncRadarRangeRings(L);
     this._renderTopOverlays();
     this._syncLayerSwitcherState();
     this._updateTimeline();
@@ -2485,6 +2550,7 @@ class BomRadarCard extends HTMLElement {
     this._layerSwitcher = null;
     this._bomReferenceLayers = [];
     this._radarCoverageLayer = null;
+    this._radarRangeLayer = null;
     this._labelLayer = null;
     this._radarLayers = [];
     this._committedRadarLayerKey = null;
@@ -2558,6 +2624,8 @@ class BomRadarCardEditor extends HTMLElement {
     const layerOptionLabel = layer => `${layer.name}${layer.unit && !['icon', 'level'].includes(layer.unit) ? ` (${layer.unit === 'deg' ? '°' : layer.unit})` : ''}`;
     const rainfallForecastSelected = activeEditorLayer.startsWith('forecast_rain_');
     const radarCoverageAvailable = supportsRadarCoverageLayer(activeEditorLayer);
+    const selectedRadar = getRadarStation(cfg.radar_station);
+    const radarStates = [...new Set(RADAR_STATIONS.map(station => station.state))];
     const blitzLoaded = isBlitzortungLoaded(this._hass);
     const additionalBomReferenceLayers = Object.entries(BOM_REFERENCE_OVERLAY_STYLES)
       .filter(([key]) => !['state_borders', 'towns_and_cities'].includes(key));
@@ -2707,17 +2775,28 @@ class BomRadarCardEditor extends HTMLElement {
           </div>
           ${this._toggle('allow_overzoom', 'Closer zoom · experimental', cfg.allow_overzoom === true, 'overzoom-help')}
           <div class="help-text" id="overzoom-help">Allow zoom levels up to 10. This enlarges the map without adding weather detail.</div>
+          <div class="row">
+            <label for="radar_station">Centre on a radar</label>
+            <select id="radar_station" aria-describedby="radar-station-help">
+              <option value="" ${!selectedRadar && !cfg.radar_station ? 'selected' : ''}>Home or custom coordinates</option>
+              ${!selectedRadar && cfg.radar_station != null && cfg.radar_station !== '' ? `<option value="${escapeHtml(cfg.radar_station)}" selected>Unknown radar (${escapeHtml(cfg.radar_station)})</option>` : ''}
+              ${radarStates.map(state => `<optgroup label="${state}">${RADAR_STATIONS.filter(station => station.state === state).map(station => `<option value="${station.id}" ${selectedRadar?.id === station.id ? 'selected' : ''}>${escapeHtml(station.name)}</option>`).join('')}</optgroup>`).join('')}
+            </select>
+            <div class="help-text" id="radar-station-help">Centre the national radar mosaic on a radar site. This does not isolate that radar's observations. Your home marker stays in place.</div>
+          </div>
+          ${selectedRadar ? `${this._toggle('show_range_rings', 'Distance rings around radar', cfg.show_range_rings === true, 'range-rings-help')}
+          <div class="help-text" id="range-rings-help">Show distances in kilometres at zoom 6 and above, on rain rate, reflectivity and estimated rain 1 hr. Rings are distance guides, not coverage boundaries.</div>` : ''}
           <div class="row-inline">
             <div class="row">
               <label for="center_latitude">Centre latitude</label>
-              <input type="number" id="center_latitude" step="0.01" min="-90" max="90" placeholder="Home location" aria-describedby="map-centre-help" value="${escapeHtml(cfg.center_latitude ?? '')}">
+              <input type="number" id="center_latitude" ${selectedRadar ? 'disabled' : ''} step="0.01" min="-90" max="90" placeholder="Home location" aria-describedby="map-centre-help" value="${escapeHtml(cfg.center_latitude ?? '')}">
             </div>
             <div class="row">
               <label for="center_longitude">Centre longitude</label>
-              <input type="number" id="center_longitude" step="0.01" min="-180" max="180" placeholder="Home location" aria-describedby="map-centre-help" value="${escapeHtml(cfg.center_longitude ?? '')}">
+              <input type="number" id="center_longitude" ${selectedRadar ? 'disabled' : ''} step="0.01" min="-180" max="180" placeholder="Home location" aria-describedby="map-centre-help" value="${escapeHtml(cfg.center_longitude ?? '')}">
             </div>
           </div>
-          <div class="help-text" id="map-centre-help">Leave blank to centre the map on your Home Assistant home location.</div>
+          <div class="help-text" id="map-centre-help">${selectedRadar ? 'Saved coordinates are kept while a radar is selected. Choose Home or custom coordinates to use them again.' : 'Leave blank to centre the map on your Home Assistant home location.'}</div>
           ${this._toggle('lock_map', 'Lock map position', cfg.lock_map === true, 'lock-map-help')}
           <div class="help-text" id="lock-map-help">Keep the map at its starting centre and let swipes scroll the dashboard. Map gestures are disabled; zoom buttons still work.</div>
           </div>
@@ -2865,7 +2944,7 @@ class BomRadarCardEditor extends HTMLElement {
 
     // Bind events
     const fields = [
-      'layer', 'basemap_provider', 'basemap_style', 'basemap_api_key', 'ui_theme', 'startup_playback',
+      'layer', 'basemap_provider', 'basemap_style', 'basemap_api_key', 'ui_theme', 'startup_playback', 'radar_station',
       'zoom_level', 'map_height', 'center_latitude', 'center_longitude',
       'frame_delay', 'restart_delay', 'radar_opacity', 'chrome_opacity', 'frame_count',
       'marker_latitude', 'marker_longitude', 'accent_color', 'location_color',
@@ -2880,7 +2959,7 @@ class BomRadarCardEditor extends HTMLElement {
       'auto_hide_controls', 'lock_map',
       'show_marker', 'show_zoom', 'show_recenter', 'show_layer_switcher', 'show_playback',
       'show_legend', 'show_weather_legend', 'show_legend_button', 'show_bom_boundaries', 'show_place_names', 'square_style', 'show_layer_label', 'show_attribution', 'allow_overzoom', 'use_custom_accent_color', 'use_custom_location_color',
-      'show_lightning', 'lightning_pulse', 'show_radar_coverage',
+      'show_lightning', 'lightning_pulse', 'show_radar_coverage', 'show_range_rings',
     ];
     toggles.forEach(id => {
       const el = this.shadowRoot.getElementById(id);
@@ -2917,6 +2996,12 @@ class BomRadarCardEditor extends HTMLElement {
     const config = { ...this._config };
 
     const get = (id) => this.shadowRoot.getElementById(id);
+
+    const radar = get('radar_station');
+    if (radar) {
+      if (radar.value === '') delete config.radar_station;
+      else config.radar_station = getRadarStation(radar.value)?.id ?? radar.value;
+    }
 
     const layer = get('layer');
     if (layer) config.layer = layer.value;
@@ -3045,7 +3130,7 @@ class BomRadarCardEditor extends HTMLElement {
       'auto_hide_controls', 'lock_map',
       'show_marker', 'show_zoom', 'show_recenter', 'show_layer_switcher', 'show_playback',
       'show_legend', 'show_weather_legend', 'show_legend_button', 'show_bom_boundaries', 'show_place_names', 'square_style', 'show_layer_label', 'show_attribution', 'allow_overzoom',
-      'show_lightning', 'lightning_pulse', 'show_radar_coverage',
+      'show_lightning', 'lightning_pulse', 'show_radar_coverage', 'show_range_rings',
     ];
     toggleFields.forEach(id => {
       const el = get(id);
