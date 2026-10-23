@@ -1772,12 +1772,12 @@ class BomRadarCard extends HTMLElement {
         color, weight: 1, opacity: 0.8, fill: false, interactive: false,
       }).addTo(group);
       L.marker(getRangeRingLabelPosition(station, km), {
-        pane: RADAR_RANGE_PANE, interactive: false, keyboard: false,
+        pane: RADAR_RANGE_PANE, interactive: false, keyboard: false, zIndexOffset: 1000,
         icon: L.divIcon({ className: 'bom-range-label', html: `${km} km`, iconSize: [52, 20], iconAnchor: [26, 10] }),
       }).addTo(group);
     }
     L.marker(center, {
-      pane: RADAR_RANGE_PANE, interactive: false, keyboard: false,
+      pane: RADAR_RANGE_PANE, interactive: false, keyboard: false, zIndexOffset: 1000,
       icon: L.divIcon({
         className: 'bom-radar-station', html: `<span>${escapeHtml(station.name)}</span>`,
         iconSize: [12, 12], iconAnchor: [6, 6],
